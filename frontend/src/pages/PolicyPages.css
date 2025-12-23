@@ -1,0 +1,236 @@
+.policy-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40px 20px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.policy-content {
+  max-width: 900px;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 50px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.policy-content h1 {
+  font-size: 2.5rem;
+  color: #2d3748;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.last-updated {
+  color: #718096;
+  font-size: 0.95rem;
+  margin-bottom: 40px;
+  font-style: italic;
+}
+
+.policy-content section {
+  margin-bottom: 40px;
+}
+
+.policy-content h2 {
+  font-size: 1.75rem;
+  color: #1a202c;
+  margin-top: 30px;
+  margin-bottom: 15px;
+  font-weight: 600;
+  border-bottom: 2px solid #667eea;
+  padding-bottom: 10px;
+}
+
+.policy-content h3 {
+  font-size: 1.35rem;
+  color: #2d3748;
+  margin-top: 25px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.policy-content h4 {
+  font-size: 1.1rem;
+  color: #4a5568;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.policy-content p {
+  line-height: 1.8;
+  color: #4a5568;
+  margin-bottom: 15px;
+  font-size: 1.05rem;
+}
+
+.policy-content ul,
+.policy-content ol {
+  margin-left: 20px;
+  margin-bottom: 20px;
+  line-height: 1.9;
+}
+
+.policy-content li {
+  color: #4a5568;
+  margin-bottom: 10px;
+  font-size: 1.05rem;
+}
+
+.policy-content strong {
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.policy-content a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.policy-content a:hover {
+  color: #764ba2;
+  text-decoration: underline;
+}
+
+.policy-footer {
+  margin-top: 60px;
+  padding-top: 30px;
+  border-top: 2px solid #e2e8f0;
+  text-align: center;
+}
+
+.policy-footer p {
+  margin: 5px 0;
+  font-size: 1rem;
+}
+
+.acceptance-notice {
+  background: linear-gradient(135deg, #667eea15, #764ba215);
+  border-left: 4px solid #667eea;
+  padding: 20px;
+  margin: 30px 0;
+  border-radius: 8px;
+}
+
+.acceptance-notice p {
+  margin: 0;
+  color: #2d3748;
+  font-weight: 500;
+}
+
+/* Data Deletion Form Styles */
+.deletion-form-section {
+  background: linear-gradient(135deg, #f7fafc, #edf2f7);
+  padding: 30px;
+  border-radius: 12px;
+  margin: 30px 0;
+}
+
+.deletion-form {
+  max-width: 600px;
+  margin: 30px 0;
+}
+
+.form-group {
+  margin-bottom: 25px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 8px;
+  font-size: 1.05rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 1rem;
+  border: 2px solid #cbd5e0;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  font-family: inherit;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-group small {
+  display: block;
+  margin-top: 6px;
+  color: #718096;
+  font-size: 0.9rem;
+}
+
+.submit-btn {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  padding: 14px 32px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.submit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.submit-btn:active {
+  transform: translateY(0);
+}
+
+.success-message {
+  background: linear-gradient(135deg, #48bb7815, #38a16915);
+  border: 2px solid #48bb78;
+  border-radius: 12px;
+  padding: 30px;
+  margin: 20px 0;
+}
+
+.success-message h3 {
+  color: #2f855a;
+  margin-top: 0;
+  font-size: 1.5rem;
+}
+
+.success-message p {
+  color: #2d3748;
+  margin-bottom: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .policy-content {
+    padding: 30px 20px;
+  }
+
+  .policy-content h1 {
+    font-size: 2rem;
+  }
+
+  .policy-content h2 {
+    font-size: 1.5rem;
+  }
+
+  .policy-content h3 {
+    font-size: 1.2rem;
+  }
+
+  .policy-content p,
+  .policy-content li {
+    font-size: 1rem;
+  }
+}

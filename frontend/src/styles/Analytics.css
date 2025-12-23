@@ -1,0 +1,8 @@
+/* Import dashboard styles */
+@import './Dashboard.css';
+
+.analytics-dashboard {
+    padding: 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+}

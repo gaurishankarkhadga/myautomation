@@ -1,0 +1,115 @@
+/* Instagram Connect Styles */
+.instagram-status {
+    padding: 40px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(131, 58, 180, 0.1), rgba(253, 29, 29, 0.1));
+    backdrop-filter: blur(10px);
+}
+
+.connect-card {
+    text-align: center;
+    padding: 60px 40px;
+}
+
+.connect-card h2 {
+    font-size: 2rem;
+    margin-bottom: 16px;
+    color: #1a1a1a;
+}
+
+.connect-card p {
+    color: #666;
+    margin-bottom: 32px;
+}
+
+.btn-connect {
+    background: linear-gradient(135deg, #833ab4, #fd1d1d);
+    color: white;
+    padding: 16px 48px;
+    font-size: 1.1rem;
+    border: none;
+    border-radius: 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(131, 58, 180, 0.4);
+}
+
+.btn-connect:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(131, 58, 180, 0.6);
+}
+
+.btn-connect:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.profile-pic {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid #833ab4;
+}
+
+.profile-info h2 {
+    margin: 0;
+    font-size: 1.8rem;
+}
+
+.account-type {
+    color: #833ab4;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+}
+
+.stats {
+    display: flex;
+    gap: 40px;
+    margin: 32px 0;
+}
+
+.stat {
+    text-align: center;
+}
+
+.stat-value {
+    display: block;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1a1a1a;
+}
+
+.stat-label {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.btn-disconnect {
+    background: #dc3545;
+    color: white;
+    padding: 12px 32px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+.btn-disconnect:hover {
+    background: #c82333;
+    transform: translateY(-1px);
+}
+
+.note {
+    margin-top: 16px;
+    font-size: 0.85rem;
+    color: #999;
+}
