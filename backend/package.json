@@ -4,8 +4,7 @@
   "description": "Minimal Instagram Graph API testing server",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "nodemon server.js"
   },
   "dependencies": {
     "express": "^5.2.1",

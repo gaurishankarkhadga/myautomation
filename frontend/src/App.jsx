@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import SimpleTest from './SimpleTest';
+import InstagramTest from './InstagramTest';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsAndConditions from './pages/TermsAndConditions';
 import DataDeletion from './pages/DataDeletion';
@@ -10,7 +10,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<SimpleTest />} />
+        <Route path="/" element={<InstagramTest />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
         <Route path="/data-deletion" element={<DataDeletion />} />
