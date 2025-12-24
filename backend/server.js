@@ -7,9 +7,13 @@ const app = express();
 
 // Middleware - Allow both local and production
 const allowedOrigins = [
+  'http://localhost:5173',
   'https://mydmtestingapp.netlify.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
+
+console.log(allowedOrigins);
+
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -19,7 +23,7 @@ app.use(cors({
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      console.log('❌ CORS blocked origin:', origin);
+      console.log('[CORS] Blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -31,9 +35,7 @@ app.use(express.json());
 const tokenStore = new Map();
 
 
-// ============================================
-// INSTAGRAM GRAPH API CONFIGURATION
-// ============================================
+// Instagram Graph API Configuration
 const INSTAGRAM_CONFIG = {
   appId: process.env.INSTAGRAM_APP_ID,
   appSecret: process.env.INSTAGRAM_APP_SECRET,
@@ -44,9 +46,7 @@ const INSTAGRAM_CONFIG = {
   scopes: ['instagram_business_basic', 'instagram_business_manage_messages', 'instagram_business_manage_comments', 'instagram_business_content_publish']
 };
 
-// ============================================
-// ROUTE 1: GET OAUTH URL
-// ============================================
+// Route: Get OAuth URL
 app.get('/api/instagram/auth', (req, res) => {
   try {
     const params = new URLSearchParams({
@@ -58,7 +58,7 @@ app.get('/api/instagram/auth', (req, res) => {
 
     const authUrl = `${INSTAGRAM_CONFIG.oauthBaseUrl}/authorize?${params.toString()}`;
 
-    console.log('🔗 Generated OAuth URL');
+    console.log('[OAuth] Generated authorization URL');
 
     res.json({
       success: true,
@@ -66,7 +66,7 @@ app.get('/api/instagram/auth', (req, res) => {
       message: 'Redirect user to this URL to authorize'
     });
   } catch (error) {
-    console.error('❌ Auth URL generation error:', error.message);
+    console.error('[OAuth] Auth URL generation error:', error.message);
     res.status(500).json({
       success: false,
       error: 'Failed to generate auth URL',
@@ -75,17 +75,13 @@ app.get('/api/instagram/auth', (req, res) => {
   }
 });
 
-// ============================================
-// ROUTE 2: HANDLE OAUTH CALLBACK
-// ============================================
+// Route: Handle OAuth Callback
 app.get('/api/instagram/callback', async (req, res) => {
   try {
     const { code, error, error_reason, error_description } = req.query;
 
-    // Handle Instagram OAuth errors
     if (error) {
-      console.error('❌ Instagram OAuth error:', error_reason, error_description);
-      // Redirect to frontend with error
+      console.error('[OAuth] Instagram OAuth error:', error_reason, error_description);
       return res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?error=${error}&reason=${error_reason}`);
     }
 
@@ -93,10 +89,10 @@ app.get('/api/instagram/callback', async (req, res) => {
       return res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?error=no_code`);
     }
 
-    console.log('📩 Received authorization code');
+    console.log('[OAuth] Received authorization code');
 
     // Step 1: Exchange code for short-lived token
-    console.log('🔄 Exchanging code for token...');
+    console.log('[OAuth] Exchanging code for token');
     const tokenResponse = await axios.post(
       `${INSTAGRAM_CONFIG.oauthBaseUrl}/access_token`,
       new URLSearchParams({
@@ -113,10 +109,10 @@ app.get('/api/instagram/callback', async (req, res) => {
 
     const shortLivedToken = tokenResponse.data.access_token;
     const userId = tokenResponse.data.user_id;
-    console.log('✅ Short-lived token received for user:', userId);
+    console.log('[OAuth] Short-lived token received for user:', userId);
 
     // Step 2: Exchange for long-lived token (60 days)
-    console.log('🔄 Getting long-lived token...');
+    console.log('[OAuth] Getting long-lived token');
     const longLivedResponse = await axios.get(
       `${INSTAGRAM_CONFIG.graphBaseUrl}/access_token`,
       {
@@ -130,7 +126,7 @@ app.get('/api/instagram/callback', async (req, res) => {
 
     const longLivedToken = longLivedResponse.data.access_token;
     const expiresIn = longLivedResponse.data.expires_in;
-    console.log('✅ Long-lived token received (expires in', expiresIn, 'seconds)');
+    console.log('[OAuth] Long-lived token received (expires in', expiresIn, 'seconds)');
 
     // Store token in memory
     tokenStore.set(userId, {
@@ -143,14 +139,12 @@ app.get('/api/instagram/callback', async (req, res) => {
     res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?token=${longLivedToken}&userId=${userId}&expiresIn=${expiresIn}`);
 
   } catch (error) {
-    console.error('❌ OAuth callback error:', error.response?.data || error.message);
+    console.error('[OAuth] Callback error:', error.response?.data || error.message);
     res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?error=oauth_failed&message=${error.message}`);
   }
 });
 
-// ============================================
-// ROUTE 3: GET PROFILE DATA
-// ============================================
+// Route: Get Profile Data
 app.get('/api/instagram/profile', async (req, res) => {
   try {
     const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
@@ -163,7 +157,7 @@ app.get('/api/instagram/profile', async (req, res) => {
       });
     }
 
-    console.log('👤 Fetching profile data...');
+    console.log('[Profile] Fetching profile data');
 
     const fields = 'id,username,account_type,media_count,followers_count,follows_count,profile_picture_url,biography,website';
 
@@ -177,7 +171,7 @@ app.get('/api/instagram/profile', async (req, res) => {
       }
     );
 
-    console.log('✅ Profile data fetched:', response.data.username);
+    console.log('[Profile] Profile data fetched for user:', response.data.username);
 
     res.json({
       success: true,
@@ -185,7 +179,7 @@ app.get('/api/instagram/profile', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Profile fetch error:', error.response?.data || error.message);
+    console.error('[Profile] Fetch error:', error.response?.data || error.message);
     res.status(error.response?.status || 500).json({
       success: false,
       error: 'Failed to fetch profile',
@@ -195,9 +189,7 @@ app.get('/api/instagram/profile', async (req, res) => {
   }
 });
 
-// ============================================
-// ROUTE 4: GET MEDIA (POSTS & REELS)
-// ============================================
+// Route: Get Media (Posts & Reels)
 app.get('/api/instagram/media', async (req, res) => {
   try {
     const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
@@ -211,7 +203,7 @@ app.get('/api/instagram/media', async (req, res) => {
       });
     }
 
-    console.log('📸 Fetching media data...');
+    console.log('[Media] Fetching media data');
 
     const fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_shared_to_feed';
 
@@ -232,7 +224,7 @@ app.get('/api/instagram/media', async (req, res) => {
     const posts = media.filter(m => m.media_type === 'IMAGE' || m.media_type === 'CAROUSEL_ALBUM');
     const reels = media.filter(m => m.media_type === 'VIDEO');
 
-    console.log(`✅ Media fetched: ${posts.length} posts, ${reels.length} reels`);
+    console.log(`[Media] Media fetched: ${posts.length} posts, ${reels.length} reels`);
 
     res.json({
       success: true,
@@ -244,7 +236,7 @@ app.get('/api/instagram/media', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Media fetch error:', error.response?.data || error.message);
+    console.error('[Media] Fetch error:', error.response?.data || error.message);
     res.status(error.response?.status || 500).json({
       success: false,
       error: 'Failed to fetch media',
@@ -254,9 +246,7 @@ app.get('/api/instagram/media', async (req, res) => {
   }
 });
 
-// ============================================
-// HEALTH CHECK
-// ============================================
+// Health Check
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
@@ -269,7 +259,7 @@ app.get('/api/health', (req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('💥 Server error:', err);
+  console.error('[Error] Server error:', err);
   res.status(500).json({
     success: false,
     error: 'Internal server error',
@@ -289,10 +279,10 @@ app.use((req, res) => {
 // Start server
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
-  console.log(`\n🚀 Instagram Graph API Server`);
-  console.log(`📍 Running on: http://localhost:${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}\n`);
+  console.log('\n[Server] Instagram Graph API Server');
+  console.log(`[Server] Running on: http://localhost:${PORT}`);
+  console.log(`[Server] Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`[Server] Frontend URL: ${process.env.FRONTEND_URL}\n`);
 });
 
 module.exports = app;

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import './InstagramTest.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-
+console.log(import.meta.env.VITE_API_BASE_URL);
 function InstagramTest() {
     const [token, setToken] = useState('');
     const [userId, setUserId] = useState('');
@@ -11,7 +11,6 @@ function InstagramTest() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Extract token from URL params after OAuth redirect
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const tokenParam = params.get('token');
@@ -23,12 +22,10 @@ function InstagramTest() {
         } else if (tokenParam) {
             setToken(tokenParam);
             setUserId(userIdParam || '');
-            // Clean URL
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     }, []);
 
-    // Auto-fetch profile when token is set
     useEffect(() => {
         if (token) {
             fetchProfile();
@@ -44,7 +41,6 @@ function InstagramTest() {
             const data = await response.json();
 
             if (data.success) {
-                // Redirect to Instagram OAuth
                 window.location.href = data.authUrl;
             } else {
                 setError(data.error || 'Failed to get auth URL');
@@ -99,11 +95,11 @@ function InstagramTest() {
     return (
         <div className="instagram-test">
             <div className="container">
-                <h1>📸 Instagram Graph API Test</h1>
+                <h1>Instagram Graph API Test</h1>
 
                 {error && (
                     <div className="error">
-                        ❌ {error}
+                        Error: {error}
                     </div>
                 )}
 
@@ -115,13 +111,13 @@ function InstagramTest() {
                             disabled={loading}
                             className="btn-primary"
                         >
-                            {loading ? 'Connecting...' : '🔗 Connect Instagram'}
+                            {loading ? 'Connecting...' : 'Connect Instagram'}
                         </button>
                     </div>
                 ) : (
                     <div className="data-section">
                         <div className="token-info">
-                            <p><strong>✅ Connected</strong></p>
+                            <p><strong>Connected</strong></p>
                             <p className="user-id">User ID: {userId}</p>
                             <button onClick={() => { setToken(''); setProfile(null); setMedia(null); }} className="btn-secondary">
                                 Disconnect
@@ -130,10 +126,10 @@ function InstagramTest() {
 
                         <div className="actions">
                             <button onClick={fetchProfile} disabled={loading} className="btn">
-                                {loading ? 'Loading...' : '👤 Fetch Profile'}
+                                {loading ? 'Loading...' : 'Fetch Profile'}
                             </button>
                             <button onClick={fetchMedia} disabled={loading} className="btn">
-                                {loading ? 'Loading...' : '📸 Fetch Media'}
+                                {loading ? 'Loading...' : 'Fetch Media'}
                             </button>
                         </div>
 
@@ -173,8 +169,8 @@ function InstagramTest() {
                             <div className="media-section">
                                 <h2>Media ({media.total})</h2>
                                 <div className="media-summary">
-                                    <span className="badge">📷 {media.posts} Posts</span>
-                                    <span className="badge">🎥 {media.reels} Reels</span>
+                                    <span className="badge">{media.posts} Posts</span>
+                                    <span className="badge">{media.reels} Reels</span>
                                 </div>
                                 <div className="media-grid">
                                     {media.data.map((item) => (
@@ -187,8 +183,8 @@ function InstagramTest() {
                                                 <div className="media-overlay">
                                                     <span className="media-type">{item.media_type}</span>
                                                     <div className="media-stats">
-                                                        <span>❤️ {item.like_count}</span>
-                                                        <span>💬 {item.comments_count}</span>
+                                                        <span>Likes: {item.like_count}</span>
+                                                        <span>Comments: {item.comments_count}</span>
                                                     </div>
                                                 </div>
                                             </a>
