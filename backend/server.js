@@ -34,6 +34,11 @@ app.use(express.json());
 // In-memory storage for tokens (for testing only)
 const tokenStore = new Map();
 
+// In-memory storage for Instagram messaging
+const messageStore = new Map(); // userId -> array of messages
+const conversationStore = new Map(); // conversationId -> conversation data
+const igsidMap = new Map(); // IGSID -> userId mapping
+
 
 // Instagram Graph API Configuration
 const INSTAGRAM_CONFIG = {
@@ -45,6 +50,9 @@ const INSTAGRAM_CONFIG = {
   graphBaseUrl: 'https://graph.instagram.com',
   scopes: ['instagram_business_basic', 'instagram_business_manage_messages', 'instagram_business_manage_comments', 'instagram_business_content_publish']
 };
+
+// Webhook Configuration
+const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || 'your_secure_random_token_12345';
 
 // Route: Get OAuth URL
 app.get('/api/instagram/auth', (req, res) => {
@@ -141,6 +149,265 @@ app.get('/api/instagram/callback', async (req, res) => {
   } catch (error) {
     console.error('[OAuth] Callback error:', error.response?.data || error.message);
     res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?error=oauth_failed&message=${error.message}`);
+  }
+});
+
+// ==================== INSTAGRAM MESSAGING WEBHOOKS ====================
+
+// Route: Verify Webhook (required by Facebook)
+app.get('/api/instagram/webhook', (req, res) => {
+  try {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    console.log('[Webhook] Verification request received');
+    console.log('[Webhook] Mode:', mode, 'Token match:', token === WEBHOOK_VERIFY_TOKEN);
+
+    if (mode === 'subscribe' && token === WEBHOOK_VERIFY_TOKEN) {
+      console.log('[Webhook] Verification successful');
+      res.status(200).send(challenge);
+    } else {
+      console.error('[Webhook] Verification failed - invalid token');
+      res.sendStatus(403);
+    }
+  } catch (error) {
+    console.error('[Webhook] Verification error:', error.message);
+    res.sendStatus(500);
+  }
+});
+
+// Route: Receive Webhook Events (messages, reactions, etc.)
+app.post('/api/instagram/webhook', (req, res) => {
+  try {
+    const body = req.body;
+
+    console.log('[Webhook] Event received:', JSON.stringify(body, null, 2));
+
+    if (body.object === 'instagram') {
+      body.entry.forEach(entry => {
+        // Get messaging events
+        const messaging = entry.messaging || [];
+
+        messaging.forEach(event => {
+          const senderId = event.sender.id; // IGSID
+          const recipientId = event.recipient.id; // Your page's IGSID
+
+          // Handle message event
+          if (event.message) {
+            const messageData = {
+              id: event.message.mid,
+              senderId,
+              recipientId,
+              text: event.message.text || null,
+              attachments: event.message.attachments || [],
+              timestamp: event.timestamp,
+              received: new Date()
+            };
+
+            console.log('[Webhook] Message received from:', senderId);
+            console.log('[Webhook] Message text:', messageData.text);
+
+            // Store message
+            if (!messageStore.has(senderId)) {
+              messageStore.set(senderId, []);
+            }
+            messageStore.get(senderId).push(messageData);
+
+            // Update conversation
+            const conversationId = `${senderId}_${recipientId}`;
+            conversationStore.set(conversationId, {
+              id: conversationId,
+              senderId,
+              recipientId,
+              lastMessage: messageData,
+              lastMessageTime: messageData.timestamp,
+              unreadCount: (conversationStore.get(conversationId)?.unreadCount || 0) + 1
+            });
+
+            console.log('[Webhook] Message stored. Total messages from sender:', messageStore.get(senderId).length);
+          }
+
+          // Handle reaction event
+          if (event.reaction) {
+            console.log('[Webhook] Reaction received:', event.reaction);
+          }
+
+          // Handle postback event (for quick replies)
+          if (event.postback) {
+            console.log('[Webhook] Postback received:', event.postback);
+          }
+        });
+      });
+
+      res.status(200).send('EVENT_RECEIVED');
+    } else {
+      res.sendStatus(404);
+    }
+  } catch (error) {
+    console.error('[Webhook] Processing error:', error.message);
+    res.status(500).send('ERROR');
+  }
+});
+
+// ==================== INSTAGRAM MESSAGING API ====================
+
+// Route: Send Message
+app.post('/api/instagram/send-message', async (req, res) => {
+  try {
+    const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+    const { recipientId, message } = req.body;
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Access token required'
+      });
+    }
+
+    if (!recipientId || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'recipientId and message are required'
+      });
+    }
+
+    console.log('[Messaging] Sending message to:', recipientId);
+
+    // Check if message is within 24-hour window
+    const conversation = Array.from(conversationStore.values())
+      .find(c => c.senderId === recipientId);
+
+    if (conversation) {
+      const lastMessageTime = conversation.lastMessageTime;
+      const hoursSinceLastMessage = (Date.now() - lastMessageTime) / (1000 * 60 * 60);
+
+      if (hoursSinceLastMessage > 24) {
+        return res.status(400).json({
+          success: false,
+          error: '24_HOUR_WINDOW_EXPIRED',
+          message: 'Cannot send message - 24 hour messaging window has expired',
+          lastMessageTime: new Date(lastMessageTime).toISOString(),
+          hoursSinceLastMessage: Math.round(hoursSinceLastMessage)
+        });
+      }
+    }
+
+    const response = await axios.post(
+      `${INSTAGRAM_CONFIG.graphBaseUrl}/me/messages`,
+      {
+        recipient: { id: recipientId },
+        message: { text: message }
+      },
+      {
+        params: { access_token: token },
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+
+    console.log('[Messaging] Message sent successfully');
+
+    res.json({
+      success: true,
+      data: response.data,
+      message: 'Message sent successfully'
+    });
+
+  } catch (error) {
+    console.error('[Messaging] Send error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: 'Failed to send message',
+      message: error.message,
+      details: error.response?.data
+    });
+  }
+});
+
+// Route: Get All Conversations
+app.get('/api/instagram/conversations', (req, res) => {
+  try {
+    console.log('[Messaging] Fetching all conversations');
+
+    const conversations = Array.from(conversationStore.values()).map(conv => {
+      const hoursSinceLastMessage = (Date.now() - conv.lastMessageTime) / (1000 * 60 * 60);
+      const canReply = hoursSinceLastMessage <= 24;
+
+      return {
+        ...conv,
+        canReply,
+        hoursSinceLastMessage: Math.round(hoursSinceLastMessage),
+        lastMessageTimeFormatted: new Date(conv.lastMessageTime).toISOString()
+      };
+    });
+
+    // Sort by most recent first
+    conversations.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+
+    console.log('[Messaging] Found', conversations.length, 'conversations');
+
+    res.json({
+      success: true,
+      count: conversations.length,
+      data: conversations
+    });
+
+  } catch (error) {
+    console.error('[Messaging] Fetch conversations error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch conversations',
+      message: error.message
+    });
+  }
+});
+
+// Route: Get Messages from a Specific Sender
+app.get('/api/instagram/messages/:senderId', (req, res) => {
+  try {
+    const { senderId } = req.params;
+
+    console.log('[Messaging] Fetching messages from:', senderId);
+
+    const messages = messageStore.get(senderId) || [];
+
+    res.json({
+      success: true,
+      senderId,
+      count: messages.length,
+      data: messages
+    });
+
+  } catch (error) {
+    console.error('[Messaging] Fetch messages error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch messages',
+      message: error.message
+    });
+  }
+});
+
+// Route: Clear Message Store (for testing)
+app.delete('/api/instagram/messages/clear', (req, res) => {
+  try {
+    messageStore.clear();
+    conversationStore.clear();
+
+    console.log('[Messaging] Message stores cleared');
+
+    res.json({
+      success: true,
+      message: 'Message stores cleared'
+    });
+
+  } catch (error) {
+    console.error('[Messaging] Clear error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear messages',
+      message: error.message
+    });
   }
 });
 
