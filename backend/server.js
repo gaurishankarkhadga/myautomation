@@ -8,6 +8,7 @@ const app = express();
 // Middleware - Allow both local and production
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://localhost:5174', // Vite alternative port
   'https://mydmtestingapp.netlify.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
