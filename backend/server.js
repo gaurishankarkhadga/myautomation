@@ -2,18 +2,16 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const crypto = require('crypto');
 
 const app = express();
 
 // Middleware - Allow both local and production
-const allowedOrigins = [
+const allowedOrigins = [...new Set([
   'http://localhost:5173',
-  'http://localhost:5174', // Vite alternative port
   'https://mydmtestingapp.netlify.app',
   process.env.FRONTEND_URL
-].filter(Boolean);
-
-console.log(allowedOrigins);
+].filter(Boolean))];
 
 
 app.use(cors({
@@ -30,7 +28,22 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+
+// Raw body capture for webhook signature verification (must be BEFORE express.json)
+app.use('/api/instagram/webhook', express.raw({ type: 'application/json' }));
+
+// Parse JSON for all other routes
+app.use((req, res, next) => {
+  if (req.path === '/api/instagram/webhook' && req.method === 'POST') {
+    // Already parsed as raw buffer above, convert to JSON
+    if (Buffer.isBuffer(req.body)) {
+      req.rawBody = req.body;
+      req.body = JSON.parse(req.body.toString());
+    }
+    return next();
+  }
+  express.json()(req, res, next);
+});
 
 // In-memory storage for tokens (for testing only)
 const tokenStore = new Map();
@@ -54,6 +67,31 @@ const INSTAGRAM_CONFIG = {
 
 // Webhook Configuration
 const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || 'your_secure_random_token_12345';
+
+// HMAC signature verification for webhook security
+function verifyWebhookSignature(req) {
+  const signature = req.headers['x-hub-signature-256'];
+  if (!signature || !req.rawBody) {
+    console.log('[Webhook] No signature or raw body available - skipping verification');
+    return true; // Allow in dev, but log warning
+  }
+
+  const expectedSignature = 'sha256=' +
+    crypto.createHmac('sha256', INSTAGRAM_CONFIG.appSecret)
+      .update(req.rawBody)
+      .digest('hex');
+
+  const isValid = crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
+
+  if (!isValid) {
+    console.error('[Webhook] SIGNATURE MISMATCH - possible spoofed request');
+  }
+
+  return isValid;
+}
 
 // Route: Get OAuth URL
 app.get('/api/instagram/auth', (req, res) => {
@@ -149,7 +187,7 @@ app.get('/api/instagram/callback', async (req, res) => {
 
   } catch (error) {
     console.error('[OAuth] Callback error:', error.response?.data || error.message);
-    res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?error=oauth_failed&message=${error.message}`);
+    res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?error=oauth_failed&message=${encodeURIComponent(error.message)}`);
   }
 });
 
@@ -181,6 +219,12 @@ app.get('/api/instagram/webhook', (req, res) => {
 // Route: Receive Webhook Events (messages, reactions, etc.)
 app.post('/api/instagram/webhook', (req, res) => {
   try {
+    // Verify the webhook signature from Instagram
+    if (!verifyWebhookSignature(req)) {
+      console.error('[Webhook] Request rejected - invalid signature');
+      return res.sendStatus(403);
+    }
+
     const body = req.body;
 
     console.log('[Webhook] Event received:', JSON.stringify(body, null, 2));
@@ -550,7 +594,10 @@ app.listen(PORT, () => {
   console.log('\n[Server] Instagram Graph API Server');
   console.log(`[Server] Running on: http://localhost:${PORT}`);
   console.log(`[Server] Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`[Server] Frontend URL: ${process.env.FRONTEND_URL}\n`);
+  console.log(`[Server] Frontend URL: ${process.env.FRONTEND_URL}`);
+  console.log(`[Server] OAuth Callback: ${process.env.INSTAGRAM_REDIRECT_URI}`);
+  console.log(`[Server] Webhook URL: ${process.env.NODE_ENV === 'production' ? 'https://myautomation-test3.onrender.com' : 'http://localhost:' + PORT}/api/instagram/webhook`);
+  console.log(`[Server] Webhook Verify Token: ${WEBHOOK_VERIFY_TOKEN ? '*** (set)' : 'NOT SET'}\n`);
 });
 
 module.exports = app;
