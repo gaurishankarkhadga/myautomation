@@ -48,6 +48,11 @@ const messageStore = new Map();
 const conversationStore = new Map();
 const igsidMap = new Map();
 
+// Auto-Reply stores
+const autoReplySettings = new Map();  // igUserId -> { enabled, delaySeconds, message }
+const autoReplyLog = [];              // [{ commentId, commentText, commenterUsername, mediaId, replyText, status, scheduledAt, repliedAt, error }]
+const pendingReplies = new Map();     // commentId -> timeoutId
+
 
 // Instagram Graph API Configuration
 const INSTAGRAM_CONFIG = {
@@ -85,6 +90,111 @@ function verifyWebhookSignature(req) {
   }
 
   return isValid;
+}
+
+// Helper: Auto-reply to a comment using Instagram Graph API
+async function replyToComment(commentId, message, accessToken) {
+  try {
+    console.log('[AutoReply] Replying to comment:', commentId);
+
+    const response = await axios.post(
+      `${INSTAGRAM_CONFIG.graphBaseUrl}/${commentId}/replies`,
+      null,
+      {
+        params: {
+          message: message,
+          access_token: accessToken
+        }
+      }
+    );
+
+    console.log('[AutoReply] Reply sent successfully. Reply ID:', response.data.id);
+    return { success: true, replyId: response.data.id };
+  } catch (error) {
+    const errorMsg = error.response?.data?.error?.message || error.message;
+    console.error('[AutoReply] Failed to reply:', errorMsg);
+    return { success: false, error: errorMsg };
+  }
+}
+
+// Helper: Schedule a delayed auto-reply
+function scheduleAutoReply(commentData, igUserId) {
+  const settings = autoReplySettings.get(igUserId);
+  if (!settings || !settings.enabled) {
+    console.log('[AutoReply] Auto-reply disabled for user:', igUserId);
+    return;
+  }
+
+  // Don't reply to replies (only top-level comments)
+  if (commentData.parentId) {
+    console.log('[AutoReply] Skipping reply to sub-comment:', commentData.commentId);
+    return;
+  }
+
+  // Don't reply if already pending/replied
+  if (pendingReplies.has(commentData.commentId)) {
+    console.log('[AutoReply] Already scheduled for comment:', commentData.commentId);
+    return;
+  }
+
+  // Get access token for this user
+  const tokenData = tokenStore.get(igUserId);
+  if (!tokenData) {
+    console.error('[AutoReply] No access token found for user:', igUserId);
+    const logEntry = {
+      commentId: commentData.commentId,
+      commentText: commentData.text,
+      commenterUsername: commentData.username,
+      mediaId: commentData.mediaId,
+      replyText: settings.message,
+      status: 'failed',
+      error: 'No access token found',
+      scheduledAt: new Date().toISOString(),
+      repliedAt: null
+    };
+    autoReplyLog.unshift(logEntry);
+    return;
+  }
+
+  const delayMs = (settings.delaySeconds || 10) * 1000;
+  console.log(`[AutoReply] Scheduling reply in ${settings.delaySeconds}s for comment: ${commentData.commentId}`);
+
+  // Add log entry as 'pending'
+  const logEntry = {
+    commentId: commentData.commentId,
+    commentText: commentData.text,
+    commenterUsername: commentData.username,
+    mediaId: commentData.mediaId,
+    replyText: settings.message,
+    status: 'pending',
+    error: null,
+    scheduledAt: new Date().toISOString(),
+    repliedAt: null
+  };
+  autoReplyLog.unshift(logEntry);
+
+  // Keep log to max 100 entries
+  if (autoReplyLog.length > 100) {
+    autoReplyLog.length = 100;
+  }
+
+  const timeoutId = setTimeout(async () => {
+    const result = await replyToComment(commentData.commentId, settings.message, tokenData.accessToken);
+
+    // Update log entry
+    const entry = autoReplyLog.find(e => e.commentId === commentData.commentId);
+    if (entry) {
+      entry.status = result.success ? 'sent' : 'failed';
+      entry.repliedAt = new Date().toISOString();
+      entry.error = result.error || null;
+      if (result.replyId) entry.replyId = result.replyId;
+    }
+
+    pendingReplies.delete(commentData.commentId);
+    console.log(`[AutoReply] Reply ${result.success ? 'sent' : 'failed'} for comment: ${commentData.commentId}`);
+  }, delayMs);
+
+  pendingReplies.set(commentData.commentId, timeoutId);
 }
 
 // Route: Get OAuth URL
@@ -225,7 +335,34 @@ app.post('/api/instagram/webhook', (req, res) => {
 
     if (body.object === 'instagram') {
       body.entry.forEach(entry => {
-        // Get messaging events
+        const igUserId = entry.id;
+
+        // ---- Handle Comment Events (changes array) ----
+        const changes = entry.changes || [];
+        changes.forEach(change => {
+          if (change.field === 'comments') {
+            const commentValue = change.value;
+            console.log('[Webhook] Comment event received:', JSON.stringify(commentValue, null, 2));
+
+            const commentData = {
+              commentId: commentValue.id,
+              text: commentValue.text,
+              username: commentValue.from?.username || 'unknown',
+              senderId: commentValue.from?.id,
+              mediaId: commentValue.media?.id,
+              mediaProductType: commentValue.media?.media_product_type,
+              parentId: commentValue.parent_id || null,
+              timestamp: commentValue.timestamp
+            };
+
+            console.log(`[Webhook] Comment from @${commentData.username}: "${commentData.text}"`);
+
+            // Trigger auto-reply if enabled
+            scheduleAutoReply(commentData, igUserId);
+          }
+        });
+
+        // ---- Handle Messaging Events (messaging array) ----
         const messaging = entry.messaging || [];
 
         messaging.forEach(event => {
@@ -445,6 +582,147 @@ app.delete('/api/instagram/messages/clear', (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to clear messages',
+      message: error.message
+    });
+  }
+});
+
+// ==================== INSTAGRAM AUTO-REPLY TO COMMENTS ====================
+
+// Route: Save Auto-Reply Settings
+app.post('/api/instagram/auto-reply/settings', (req, res) => {
+  try {
+    const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+    const { userId, enabled, delaySeconds, message } = req.body;
+
+    if (!token || !userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'token and userId are required'
+      });
+    }
+
+    if (!message || message.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Reply message cannot be empty'
+      });
+    }
+
+    const delay = Math.min(Math.max(parseInt(delaySeconds) || 10, 5), 300);
+
+    autoReplySettings.set(userId, {
+      enabled: Boolean(enabled),
+      delaySeconds: delay,
+      message: message.trim()
+    });
+
+    // Store token if not already stored (needed for replying)
+    if (!tokenStore.has(userId)) {
+      tokenStore.set(userId, {
+        accessToken: token,
+        createdAt: new Date()
+      });
+    }
+
+    console.log(`[AutoReply] Settings saved for user ${userId}: enabled=${enabled}, delay=${delay}s`);
+
+    res.json({
+      success: true,
+      message: 'Auto-reply settings saved',
+      data: autoReplySettings.get(userId)
+    });
+
+  } catch (error) {
+    console.error('[AutoReply] Settings save error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to save settings',
+      message: error.message
+    });
+  }
+});
+
+// Route: Get Auto-Reply Settings
+app.get('/api/instagram/auto-reply/settings', (req, res) => {
+  try {
+    const userId = req.query.userId;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId query param is required'
+      });
+    }
+
+    const settings = autoReplySettings.get(userId) || {
+      enabled: false,
+      delaySeconds: 10,
+      message: 'Thanks for your comment! 🙏'
+    };
+
+    res.json({
+      success: true,
+      data: settings
+    });
+
+  } catch (error) {
+    console.error('[AutoReply] Settings fetch error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch settings',
+      message: error.message
+    });
+  }
+});
+
+// Route: Get Auto-Reply Log
+app.get('/api/instagram/auto-reply/log', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const logs = autoReplyLog.slice(0, limit);
+
+    res.json({
+      success: true,
+      count: logs.length,
+      total: autoReplyLog.length,
+      pendingCount: pendingReplies.size,
+      data: logs
+    });
+
+  } catch (error) {
+    console.error('[AutoReply] Log fetch error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch log',
+      message: error.message
+    });
+  }
+});
+
+// Route: Clear Auto-Reply Log
+app.delete('/api/instagram/auto-reply/log', (req, res) => {
+  try {
+    // Cancel all pending replies
+    for (const [commentId, timeoutId] of pendingReplies.entries()) {
+      clearTimeout(timeoutId);
+      console.log('[AutoReply] Cancelled pending reply for:', commentId);
+    }
+    pendingReplies.clear();
+    autoReplyLog.length = 0;
+
+    console.log('[AutoReply] Log cleared and pending replies cancelled');
+
+    res.json({
+      success: true,
+      message: 'Auto-reply log cleared and pending replies cancelled'
+    });
+
+  } catch (error) {
+    console.error('[AutoReply] Log clear error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear log',
       message: error.message
     });
   }
