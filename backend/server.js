@@ -6,7 +6,6 @@ const crypto = require('crypto');
 
 const app = express();
 
-// Middleware - Allow both local and production
 const allowedOrigins = [...new Set([
   'http://localhost:5173',
   'https://mydmtestingapp.netlify.app',
@@ -16,7 +15,6 @@ const allowedOrigins = [...new Set([
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.indexOf(origin) !== -1) {
@@ -29,13 +27,11 @@ app.use(cors({
   credentials: true
 }));
 
-// Raw body capture for webhook signature verification (must be BEFORE express.json)
 app.use('/api/instagram/webhook', express.raw({ type: 'application/json' }));
 
 // Parse JSON for all other routes
 app.use((req, res, next) => {
   if (req.path === '/api/instagram/webhook' && req.method === 'POST') {
-    // Already parsed as raw buffer above, convert to JSON
     if (Buffer.isBuffer(req.body)) {
       req.rawBody = req.body;
       req.body = JSON.parse(req.body.toString());
@@ -45,13 +41,12 @@ app.use((req, res, next) => {
   express.json()(req, res, next);
 });
 
-// In-memory storage for tokens (for testing only)
+
 const tokenStore = new Map();
 
-// In-memory storage for Instagram messaging
-const messageStore = new Map(); // userId -> array of messages
-const conversationStore = new Map(); // conversationId -> conversation data
-const igsidMap = new Map(); // IGSID -> userId mapping
+const messageStore = new Map();
+const conversationStore = new Map();
+const igsidMap = new Map();
 
 
 // Instagram Graph API Configuration
@@ -66,14 +61,13 @@ const INSTAGRAM_CONFIG = {
 };
 
 // Webhook Configuration
-const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || 'your_secure_random_token_12345';
+const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN;
 
-// HMAC signature verification for webhook security
 function verifyWebhookSignature(req) {
   const signature = req.headers['x-hub-signature-256'];
   if (!signature || !req.rawBody) {
     console.log('[Webhook] No signature or raw body available - skipping verification');
-    return true; // Allow in dev, but log warning
+    return true;
   }
 
   const expectedSignature = 'sha256=' +
@@ -235,8 +229,8 @@ app.post('/api/instagram/webhook', (req, res) => {
         const messaging = entry.messaging || [];
 
         messaging.forEach(event => {
-          const senderId = event.sender.id; // IGSID
-          const recipientId = event.recipient.id; // Your page's IGSID
+          const senderId = event.sender.id;
+          const recipientId = event.recipient.id;
 
           // Handle message event
           if (event.message) {
@@ -558,6 +552,103 @@ app.get('/api/instagram/media', async (req, res) => {
   }
 });
 
+// ==================== META PLATFORM CALLBACKS ====================
+
+// Helper: Parse Meta signed_request
+function parseSignedRequest(signedRequest) {
+  try {
+    const [encodedSig, payload] = signedRequest.split('.');
+    const data = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+
+    const expectedSig = crypto
+      .createHmac('sha256', INSTAGRAM_CONFIG.appSecret)
+      .update(payload)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    if (encodedSig !== expectedSig) {
+      console.error('[Meta] Signed request signature mismatch');
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('[Meta] Failed to parse signed_request:', error.message);
+    return null;
+  }
+}
+
+// Route: Deauthorize Callback (called when user removes app from Instagram)
+app.post('/api/instagram/deauthorize', (req, res) => {
+  try {
+    const { signed_request } = req.body;
+
+    if (signed_request) {
+      const data = parseSignedRequest(signed_request);
+      if (data && data.user_id) {
+        console.log('[Deauthorize] User removed app, user_id:', data.user_id);
+
+        // Remove stored token for this user
+        tokenStore.delete(data.user_id);
+
+        // Clean up any stored messages/conversations
+        messageStore.delete(data.user_id);
+      }
+    }
+
+    console.log('[Deauthorize] Callback processed successfully');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Deauthorize] Error:', error.message);
+    res.json({ success: true });
+  }
+});
+
+// Route: Data Deletion Request (GDPR/CCPA compliance, required by Meta)
+app.post('/api/instagram/data-deletion', (req, res) => {
+  try {
+    const { signed_request } = req.body;
+    let userId = 'unknown';
+
+    if (signed_request) {
+      const data = parseSignedRequest(signed_request);
+      if (data && data.user_id) {
+        userId = data.user_id;
+        console.log('[DataDeletion] Request received for user_id:', userId);
+
+        // Delete all user data
+        tokenStore.delete(userId);
+        messageStore.delete(userId);
+
+        // Clean up conversations involving this user
+        for (const [key, conv] of conversationStore.entries()) {
+          if (conv.senderId === userId || conv.recipientId === userId) {
+            conversationStore.delete(key);
+          }
+        }
+      }
+    }
+
+    const confirmationCode = `DEL-${userId}-${Date.now()}`;
+    const statusUrl = `${INSTAGRAM_CONFIG.frontendUrl}/data-deletion?code=${confirmationCode}`;
+
+    console.log('[DataDeletion] Processed. Code:', confirmationCode);
+
+    res.json({
+      url: statusUrl,
+      confirmation_code: confirmationCode
+    });
+  } catch (error) {
+    console.error('[DataDeletion] Error:', error.message);
+    res.json({
+      url: `${INSTAGRAM_CONFIG.frontendUrl}/data-deletion`,
+      confirmation_code: `DEL-error-${Date.now()}`
+    });
+  }
+});
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -601,3 +692,5 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
+
