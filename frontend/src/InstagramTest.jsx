@@ -11,13 +11,25 @@ function InstagramTest() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Auto-reply state
+    // Comment auto-reply state
     const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
     const [autoReplyDelay, setAutoReplyDelay] = useState(10);
     const [autoReplyMessage, setAutoReplyMessage] = useState('Thanks for your comment! 🙏');
     const [autoReplyLog, setAutoReplyLog] = useState([]);
     const [autoReplySaving, setAutoReplySaving] = useState(false);
     const [autoReplyStatus, setAutoReplyStatus] = useState('');
+
+    // DM auto-reply state
+    const [dmAutoReplyEnabled, setDmAutoReplyEnabled] = useState(false);
+    const [dmAutoReplyDelay, setDmAutoReplyDelay] = useState(10);
+    const [dmAutoReplyMessage, setDmAutoReplyMessage] = useState('Thanks for reaching out! I will get back to you shortly.');
+    const [dmAutoReplyLog, setDmAutoReplyLog] = useState([]);
+    const [dmAutoReplySaving, setDmAutoReplySaving] = useState(false);
+    const [dmAutoReplyStatus, setDmAutoReplyStatus] = useState('');
+
+    // Webhook subscription state
+    const [webhookStatus, setWebhookStatus] = useState('');
+    const [webhookLoading, setWebhookLoading] = useState(false);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -39,6 +51,8 @@ function InstagramTest() {
             fetchProfile();
             fetchAutoReplySettings();
             fetchAutoReplyLog();
+            fetchDmAutoReplySettings();
+            fetchDmAutoReplyLog();
         }
     }, [token, userId]);
 
@@ -102,7 +116,32 @@ function InstagramTest() {
         }
     };
 
-    // ==================== AUTO-REPLY FUNCTIONS ====================
+    // ==================== WEBHOOK SUBSCRIPTION ====================
+
+    const subscribeWebhooks = async () => {
+        try {
+            setWebhookLoading(true);
+            setWebhookStatus('');
+
+            const response = await fetch(`${API_BASE_URL}/api/instagram/subscribe-webhooks?token=${token}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                setWebhookStatus('Webhooks subscribed successfully! Comments & DM events will now be received.');
+            } else {
+                setWebhookStatus(`Error: ${data.error || data.message}`);
+            }
+        } catch (err) {
+            setWebhookStatus(`Error: ${err.message}`);
+        } finally {
+            setWebhookLoading(false);
+            setTimeout(() => setWebhookStatus(''), 5000);
+        }
+    };
+
+    // ==================== COMMENT AUTO-REPLY FUNCTIONS ====================
 
     const fetchAutoReplySettings = async () => {
         try {
@@ -180,6 +219,84 @@ function InstagramTest() {
         }
     };
 
+    // ==================== DM AUTO-REPLY FUNCTIONS ====================
+
+    const fetchDmAutoReplySettings = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/instagram/dm-auto-reply/settings?userId=${userId}`);
+            const data = await response.json();
+
+            if (data.success) {
+                setDmAutoReplyEnabled(data.data.enabled);
+                setDmAutoReplyDelay(data.data.delaySeconds);
+                setDmAutoReplyMessage(data.data.message);
+            }
+        } catch (err) {
+            console.error('Failed to fetch DM auto-reply settings:', err);
+        }
+    };
+
+    const saveDmAutoReplySettings = async () => {
+        try {
+            setDmAutoReplySaving(true);
+            setDmAutoReplyStatus('');
+
+            const response = await fetch(`${API_BASE_URL}/api/instagram/dm-auto-reply/settings?token=${token}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId,
+                    enabled: dmAutoReplyEnabled,
+                    delaySeconds: dmAutoReplyDelay,
+                    message: dmAutoReplyMessage
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                setDmAutoReplyStatus('DM auto-reply settings saved!');
+                setTimeout(() => setDmAutoReplyStatus(''), 3000);
+            } else {
+                setDmAutoReplyStatus(`Error: ${data.error}`);
+            }
+        } catch (err) {
+            setDmAutoReplyStatus(`Error: ${err.message}`);
+        } finally {
+            setDmAutoReplySaving(false);
+        }
+    };
+
+    const fetchDmAutoReplyLog = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/instagram/dm-auto-reply/log?limit=20`);
+            const data = await response.json();
+
+            if (data.success) {
+                setDmAutoReplyLog(data.data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch DM auto-reply log:', err);
+        }
+    };
+
+    const clearDmAutoReplyLog = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/instagram/dm-auto-reply/log`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                setDmAutoReplyLog([]);
+                setDmAutoReplyStatus('DM log cleared');
+                setTimeout(() => setDmAutoReplyStatus(''), 2000);
+            }
+        } catch (err) {
+            console.error('Failed to clear DM log:', err);
+        }
+    };
+
     const getStatusBadgeClass = (status) => {
         if (status === 'sent') return 'badge-success';
         if (status === 'pending') return 'badge-pending';
@@ -217,6 +334,28 @@ function InstagramTest() {
                             <button onClick={() => { setToken(''); setProfile(null); setMedia(null); }} className="btn-secondary">
                                 Disconnect
                             </button>
+                        </div>
+
+                        {/* ==================== WEBHOOK SUBSCRIPTION ==================== */}
+                        <div className="webhook-section">
+                            <div className="webhook-header">
+                                <h2>📡 Webhook Subscription</h2>
+                                <p className="webhook-desc">Subscribe to receive comment and DM events from Instagram. This is required before auto-reply can work.</p>
+                            </div>
+                            <div className="webhook-actions">
+                                <button
+                                    onClick={subscribeWebhooks}
+                                    disabled={webhookLoading}
+                                    className="btn-webhook"
+                                >
+                                    {webhookLoading ? 'Subscribing...' : '🔔 Subscribe to Webhooks'}
+                                </button>
+                                {webhookStatus && (
+                                    <span className={`webhook-status ${webhookStatus.includes('Error') ? 'status-error' : 'status-success'}`}>
+                                        {webhookStatus}
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
                         <div className="actions">
@@ -260,10 +399,10 @@ function InstagramTest() {
                             </div>
                         )}
 
-                        {/* ==================== AUTO-REPLY SECTION ==================== */}
+                        {/* ==================== COMMENT AUTO-REPLY SECTION ==================== */}
                         <div className="auto-reply-section">
                             <div className="auto-reply-header">
-                                <h2>⚡ Auto-Reply to Comments</h2>
+                                <h2>💬 Auto-Reply to Comments</h2>
                                 <div className={`status-indicator ${autoReplyEnabled ? 'active' : 'inactive'}`}>
                                     {autoReplyEnabled ? '● Active' : '○ Inactive'}
                                 </div>
@@ -330,10 +469,10 @@ function InstagramTest() {
                                 </div>
                             </div>
 
-                            {/* Auto-Reply Log */}
+                            {/* Comment Auto-Reply Log */}
                             <div className="auto-reply-log">
                                 <div className="log-header">
-                                    <h3>📋 Reply Log</h3>
+                                    <h3>📋 Comment Reply Log</h3>
                                     <div className="log-actions">
                                         <button onClick={fetchAutoReplyLog} className="btn-small">
                                             🔄 Refresh
@@ -347,7 +486,7 @@ function InstagramTest() {
                                 </div>
 
                                 {autoReplyLog.length === 0 ? (
-                                    <p className="log-empty">No auto-replies yet. Enable auto-reply and wait for comments on your posts.</p>
+                                    <p className="log-empty">No comment auto-replies yet. Enable auto-reply and wait for comments on your posts.</p>
                                 ) : (
                                     <div className="log-list">
                                         {autoReplyLog.map((entry, i) => (
@@ -359,6 +498,122 @@ function InstagramTest() {
                                                     </span>
                                                 </div>
                                                 <p className="log-comment">💬 "{entry.commentText}"</p>
+                                                <p className="log-reply">↩️ "{entry.replyText}"</p>
+                                                {entry.error && <p className="log-error">❌ {entry.error}</p>}
+                                                <span className="log-time">
+                                                    {entry.repliedAt
+                                                        ? `Replied: ${new Date(entry.repliedAt).toLocaleString()}`
+                                                        : `Scheduled: ${new Date(entry.scheduledAt).toLocaleString()}`
+                                                    }
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* ==================== DM AUTO-REPLY SECTION ==================== */}
+                        <div className="auto-reply-section dm-section">
+                            <div className="auto-reply-header">
+                                <h2>✉️ Auto-Reply to DMs</h2>
+                                <div className={`status-indicator ${dmAutoReplyEnabled ? 'active' : 'inactive'}`}>
+                                    {dmAutoReplyEnabled ? '● Active' : '○ Inactive'}
+                                </div>
+                            </div>
+
+                            <p className="dm-note">Auto-reply to incoming direct messages. Only works within the 24-hour messaging window (Meta policy).</p>
+
+                            <div className="auto-reply-settings">
+                                <div className="setting-row">
+                                    <label className="toggle-label">
+                                        <span>Enable DM Auto-Reply</span>
+                                        <div
+                                            className={`toggle-switch ${dmAutoReplyEnabled ? 'on' : ''}`}
+                                            onClick={() => setDmAutoReplyEnabled(!dmAutoReplyEnabled)}
+                                        >
+                                            <div className="toggle-knob"></div>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <div className="setting-row">
+                                    <label>
+                                        <span>Reply Delay (seconds)</span>
+                                        <div className="delay-input-group">
+                                            <input
+                                                type="range"
+                                                min="5"
+                                                max="300"
+                                                value={dmAutoReplyDelay}
+                                                onChange={(e) => setDmAutoReplyDelay(parseInt(e.target.value))}
+                                                className="delay-slider"
+                                            />
+                                            <span className="delay-value">{dmAutoReplyDelay}s</span>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <div className="setting-row">
+                                    <label>
+                                        <span>DM Reply Message</span>
+                                        <textarea
+                                            value={dmAutoReplyMessage}
+                                            onChange={(e) => setDmAutoReplyMessage(e.target.value)}
+                                            placeholder="Enter your DM auto-reply message..."
+                                            rows={3}
+                                            maxLength={1000}
+                                            className="reply-textarea"
+                                        />
+                                        <span className="char-count">{dmAutoReplyMessage.length}/1000</span>
+                                    </label>
+                                </div>
+
+                                <div className="setting-actions">
+                                    <button
+                                        onClick={saveDmAutoReplySettings}
+                                        disabled={dmAutoReplySaving || !dmAutoReplyMessage.trim()}
+                                        className="btn-save"
+                                    >
+                                        {dmAutoReplySaving ? 'Saving...' : '💾 Save DM Settings'}
+                                    </button>
+                                    {dmAutoReplyStatus && (
+                                        <span className={`save-status ${dmAutoReplyStatus.includes('Error') ? 'status-error' : 'status-success'}`}>
+                                            {dmAutoReplyStatus}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* DM Auto-Reply Log */}
+                            <div className="auto-reply-log">
+                                <div className="log-header">
+                                    <h3>📋 DM Reply Log</h3>
+                                    <div className="log-actions">
+                                        <button onClick={fetchDmAutoReplyLog} className="btn-small">
+                                            🔄 Refresh
+                                        </button>
+                                        {dmAutoReplyLog.length > 0 && (
+                                            <button onClick={clearDmAutoReplyLog} className="btn-small btn-danger">
+                                                🗑️ Clear
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {dmAutoReplyLog.length === 0 ? (
+                                    <p className="log-empty">No DM auto-replies yet. Enable DM auto-reply and wait for incoming messages.</p>
+                                ) : (
+                                    <div className="log-list">
+                                        {dmAutoReplyLog.map((entry, i) => (
+                                            <div key={entry.senderId + '-' + i} className="log-entry">
+                                                <div className="log-entry-top">
+                                                    <span className="log-username">Sender: {entry.senderId}</span>
+                                                    <span className={`log-status ${getStatusBadgeClass(entry.status)}`}>
+                                                        {entry.status}
+                                                    </span>
+                                                </div>
+                                                <p className="log-comment">📩 "{entry.messageText}"</p>
                                                 <p className="log-reply">↩️ "{entry.replyText}"</p>
                                                 {entry.error && <p className="log-error">❌ {entry.error}</p>}
                                                 <span className="log-time">

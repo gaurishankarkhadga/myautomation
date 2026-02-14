@@ -48,10 +48,15 @@ const messageStore = new Map();
 const conversationStore = new Map();
 const igsidMap = new Map();
 
-// Auto-Reply stores
+// Auto-Reply stores (Comments)
 const autoReplySettings = new Map();  // igUserId -> { enabled, delaySeconds, message }
 const autoReplyLog = [];              // [{ commentId, commentText, commenterUsername, mediaId, replyText, status, scheduledAt, repliedAt, error }]
 const pendingReplies = new Map();     // commentId -> timeoutId
+
+// Auto-Reply stores (DMs)
+const dmAutoReplySettings = new Map();  // igUserId -> { enabled, delaySeconds, message }
+const dmAutoReplyLog = [];              // [{ senderId, senderIGSID, messageText, replyText, status, scheduledAt, repliedAt, error }]
+const pendingDMReplies = new Map();     // senderId -> timeoutId
 
 
 // Instagram Graph API Configuration
@@ -61,7 +66,7 @@ const INSTAGRAM_CONFIG = {
   redirectUri: process.env.INSTAGRAM_REDIRECT_URI,
   frontendUrl: process.env.FRONTEND_URL,
   oauthBaseUrl: 'https://api.instagram.com/oauth',
-  graphBaseUrl: 'https://graph.instagram.com',
+  graphBaseUrl: 'https://graph.instagram.com/v24.0',
   scopes: ['instagram_business_basic', 'instagram_business_manage_messages', 'instagram_business_manage_comments', 'instagram_business_content_publish']
 };
 
@@ -99,11 +104,11 @@ async function replyToComment(commentId, message, accessToken) {
 
     const response = await axios.post(
       `${INSTAGRAM_CONFIG.graphBaseUrl}/${commentId}/replies`,
-      null,
+      { message: message },
       {
-        params: {
-          message: message,
-          access_token: accessToken
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
         }
       }
     );
@@ -113,6 +118,36 @@ async function replyToComment(commentId, message, accessToken) {
   } catch (error) {
     const errorMsg = error.response?.data?.error?.message || error.message;
     console.error('[AutoReply] Failed to reply:', errorMsg);
+    console.error('[AutoReply] Full error:', JSON.stringify(error.response?.data, null, 2));
+    return { success: false, error: errorMsg };
+  }
+}
+
+// Helper: Send a direct message using Instagram Graph API
+async function sendDirectMessage(igUserId, recipientIGSID, message, accessToken) {
+  try {
+    console.log('[DM-AutoReply] Sending DM to IGSID:', recipientIGSID);
+
+    const response = await axios.post(
+      `${INSTAGRAM_CONFIG.graphBaseUrl}/${igUserId}/messages`,
+      {
+        recipient: { id: recipientIGSID },
+        message: { text: message }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log('[DM-AutoReply] DM sent successfully. Response:', JSON.stringify(response.data));
+    return { success: true, data: response.data };
+  } catch (error) {
+    const errorMsg = error.response?.data?.error?.message || error.message;
+    console.error('[DM-AutoReply] Failed to send DM:', errorMsg);
+    console.error('[DM-AutoReply] Full error:', JSON.stringify(error.response?.data, null, 2));
     return { success: false, error: errorMsg };
   }
 }
@@ -195,6 +230,83 @@ function scheduleAutoReply(commentData, igUserId) {
   }, delayMs);
 
   pendingReplies.set(commentData.commentId, timeoutId);
+}
+
+// Helper: Schedule a delayed auto-reply to DM
+function scheduleDMAutoReply(messageData, igUserId) {
+  const settings = dmAutoReplySettings.get(igUserId);
+  if (!settings || !settings.enabled) {
+    console.log('[DM-AutoReply] DM auto-reply disabled for user:', igUserId);
+    return;
+  }
+
+  const senderId = messageData.senderId;
+
+  // Don't reply to own messages (echo prevention)
+  if (senderId === igUserId) {
+    console.log('[DM-AutoReply] Skipping echo (own message)');
+    return;
+  }
+
+  // Don't reply if already pending
+  if (pendingDMReplies.has(senderId)) {
+    console.log('[DM-AutoReply] Already scheduled for sender:', senderId);
+    return;
+  }
+
+  // Get access token for this user
+  const tokenData = tokenStore.get(igUserId);
+  if (!tokenData) {
+    console.error('[DM-AutoReply] No access token found for user:', igUserId);
+    const logEntry = {
+      senderId,
+      messageText: messageData.text,
+      replyText: settings.message,
+      status: 'failed',
+      error: 'No access token found',
+      scheduledAt: new Date().toISOString(),
+      repliedAt: null
+    };
+    dmAutoReplyLog.unshift(logEntry);
+    return;
+  }
+
+  const delayMs = (settings.delaySeconds || 10) * 1000;
+  console.log(`[DM-AutoReply] Scheduling DM reply in ${settings.delaySeconds}s for sender: ${senderId}`);
+
+  // Add log entry as 'pending'
+  const logEntry = {
+    senderId,
+    messageText: messageData.text,
+    replyText: settings.message,
+    status: 'pending',
+    error: null,
+    scheduledAt: new Date().toISOString(),
+    repliedAt: null
+  };
+  dmAutoReplyLog.unshift(logEntry);
+
+  // Keep log to max 100 entries
+  if (dmAutoReplyLog.length > 100) {
+    dmAutoReplyLog.length = 100;
+  }
+
+  const timeoutId = setTimeout(async () => {
+    const result = await sendDirectMessage(igUserId, senderId, settings.message, tokenData.accessToken);
+
+    // Update log entry
+    const entry = dmAutoReplyLog.find(e => e.senderId === senderId && e.status === 'pending');
+    if (entry) {
+      entry.status = result.success ? 'sent' : 'failed';
+      entry.repliedAt = new Date().toISOString();
+      entry.error = result.error || null;
+    }
+
+    pendingDMReplies.delete(senderId);
+    console.log(`[DM-AutoReply] DM reply ${result.success ? 'sent' : 'failed'} for sender: ${senderId}`);
+  }, delayMs);
+
+  pendingDMReplies.set(senderId, timeoutId);
 }
 
 // Route: Get OAuth URL
@@ -345,7 +457,7 @@ app.post('/api/instagram/webhook', (req, res) => {
             console.log('[Webhook] Comment event received:', JSON.stringify(commentValue, null, 2));
 
             const commentData = {
-              commentId: commentValue.id,
+              commentId: commentValue.comment_id || commentValue.id,
               text: commentValue.text,
               username: commentValue.from?.username || 'unknown',
               senderId: commentValue.from?.id,
@@ -402,6 +514,9 @@ app.post('/api/instagram/webhook', (req, res) => {
             });
 
             console.log('[Webhook] Message stored. Total messages from sender:', messageStore.get(senderId).length);
+
+            // Trigger DM auto-reply if enabled
+            scheduleDMAutoReply(messageData, recipientId);
           }
 
           // Handle reaction event
@@ -476,8 +591,10 @@ app.post('/api/instagram/send-message', async (req, res) => {
         message: { text: message }
       },
       {
-        params: { access_token: token },
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       }
     );
 
@@ -724,6 +841,193 @@ app.delete('/api/instagram/auto-reply/log', (req, res) => {
       success: false,
       error: 'Failed to clear log',
       message: error.message
+    });
+  }
+});
+
+// ==================== DM AUTO-REPLY ENDPOINTS ====================
+
+// Route: Save DM Auto-Reply Settings
+app.post('/api/instagram/dm-auto-reply/settings', (req, res) => {
+  try {
+    const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+    const { userId, enabled, delaySeconds, message } = req.body;
+
+    if (!token || !userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'token and userId are required'
+      });
+    }
+
+    if (!message || message.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Reply message cannot be empty'
+      });
+    }
+
+    const delay = Math.min(Math.max(parseInt(delaySeconds) || 10, 5), 300);
+
+    dmAutoReplySettings.set(userId, {
+      enabled: Boolean(enabled),
+      delaySeconds: delay,
+      message: message.trim()
+    });
+
+    // Store token if not already stored (needed for replying)
+    if (!tokenStore.has(userId)) {
+      tokenStore.set(userId, {
+        accessToken: token,
+        createdAt: new Date()
+      });
+    }
+
+    console.log(`[DM-AutoReply] Settings saved for user ${userId}: enabled=${enabled}, delay=${delay}s`);
+
+    res.json({
+      success: true,
+      message: 'DM auto-reply settings saved',
+      data: dmAutoReplySettings.get(userId)
+    });
+
+  } catch (error) {
+    console.error('[DM-AutoReply] Settings save error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to save DM auto-reply settings',
+      message: error.message
+    });
+  }
+});
+
+// Route: Get DM Auto-Reply Settings
+app.get('/api/instagram/dm-auto-reply/settings', (req, res) => {
+  try {
+    const userId = req.query.userId;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId query param is required'
+      });
+    }
+
+    const settings = dmAutoReplySettings.get(userId) || {
+      enabled: false,
+      delaySeconds: 10,
+      message: 'Thanks for reaching out! I will get back to you shortly.'
+    };
+
+    res.json({
+      success: true,
+      data: settings
+    });
+
+  } catch (error) {
+    console.error('[DM-AutoReply] Settings fetch error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch DM auto-reply settings',
+      message: error.message
+    });
+  }
+});
+
+// Route: Get DM Auto-Reply Log
+app.get('/api/instagram/dm-auto-reply/log', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const logs = dmAutoReplyLog.slice(0, limit);
+
+    res.json({
+      success: true,
+      count: logs.length,
+      total: dmAutoReplyLog.length,
+      pendingCount: pendingDMReplies.size,
+      data: logs
+    });
+
+  } catch (error) {
+    console.error('[DM-AutoReply] Log fetch error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch DM auto-reply log',
+      message: error.message
+    });
+  }
+});
+
+// Route: Clear DM Auto-Reply Log
+app.delete('/api/instagram/dm-auto-reply/log', (req, res) => {
+  try {
+    // Cancel all pending DM replies
+    for (const [senderId, timeoutId] of pendingDMReplies.entries()) {
+      clearTimeout(timeoutId);
+      console.log('[DM-AutoReply] Cancelled pending DM reply for:', senderId);
+    }
+    pendingDMReplies.clear();
+    dmAutoReplyLog.length = 0;
+
+    console.log('[DM-AutoReply] DM log cleared and pending replies cancelled');
+
+    res.json({
+      success: true,
+      message: 'DM auto-reply log cleared and pending replies cancelled'
+    });
+
+  } catch (error) {
+    console.error('[DM-AutoReply] Log clear error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear DM auto-reply log',
+      message: error.message
+    });
+  }
+});
+
+// ==================== WEBHOOK SUBSCRIPTION ====================
+
+// Route: Subscribe to webhook fields (REQUIRED for receiving events)
+app.post('/api/instagram/subscribe-webhooks', async (req, res) => {
+  try {
+    const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: 'Access token required'
+      });
+    }
+
+    console.log('[Webhooks] Subscribing to webhook fields: comments, messages');
+
+    const response = await axios.post(
+      `${INSTAGRAM_CONFIG.graphBaseUrl}/me/subscribed_apps`,
+      null,
+      {
+        params: {
+          subscribed_fields: 'comments,messages',
+          access_token: token
+        }
+      }
+    );
+
+    console.log('[Webhooks] Subscription response:', JSON.stringify(response.data));
+
+    res.json({
+      success: true,
+      message: 'Webhook subscriptions enabled for comments and messages',
+      data: response.data
+    });
+
+  } catch (error) {
+    console.error('[Webhooks] Subscription error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: 'Failed to subscribe to webhooks',
+      message: error.message,
+      details: error.response?.data
     });
   }
 });
