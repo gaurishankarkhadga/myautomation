@@ -58,6 +58,10 @@ const dmAutoReplySettings = new Map();  // igUserId -> { enabled, delaySeconds, 
 const dmAutoReplyLog = [];              // [{ senderId, senderIGSID, messageText, replyText, status, scheduledAt, repliedAt, error }]
 const pendingDMReplies = new Map();     // senderId -> timeoutId
 
+// Webhook event tracking (for debugging)
+const webhookEventLog = [];            // Last 50 webhook events received
+let webhookEventCount = 0;
+
 
 // Instagram Graph API Configuration
 const INSTAGRAM_CONFIG = {
@@ -104,11 +108,11 @@ async function replyToComment(commentId, message, accessToken) {
 
     const response = await axios.post(
       `${INSTAGRAM_CONFIG.graphBaseUrl}/${commentId}/replies`,
-      { message: message },
+      null,
       {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
+        params: {
+          message: message,
+          access_token: accessToken
         }
       }
     );
@@ -135,8 +139,10 @@ async function sendDirectMessage(igUserId, recipientIGSID, message, accessToken)
         message: { text: message }
       },
       {
+        params: {
+          access_token: accessToken
+        },
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         }
       }
@@ -445,6 +451,16 @@ app.post('/api/instagram/webhook', (req, res) => {
 
     console.log('[Webhook] Event received:', JSON.stringify(body, null, 2));
 
+    // Track webhook events for debugging
+    webhookEventCount++;
+    webhookEventLog.unshift({
+      receivedAt: new Date().toISOString(),
+      object: body.object,
+      entryCount: body.entry?.length || 0,
+      raw: JSON.stringify(body).substring(0, 500)
+    });
+    if (webhookEventLog.length > 50) webhookEventLog.length = 50;
+
     if (body.object === 'instagram') {
       body.entry.forEach(entry => {
         const igUserId = entry.id;
@@ -734,13 +750,11 @@ app.post('/api/instagram/auto-reply/settings', (req, res) => {
       message: message.trim()
     });
 
-    // Store token if not already stored (needed for replying)
-    if (!tokenStore.has(userId)) {
-      tokenStore.set(userId, {
-        accessToken: token,
-        createdAt: new Date()
-      });
-    }
+    // Always update token (needed for replying after server restart)
+    tokenStore.set(userId, {
+      accessToken: token,
+      createdAt: new Date()
+    });
 
     console.log(`[AutoReply] Settings saved for user ${userId}: enabled=${enabled}, delay=${delay}s`);
 
@@ -875,13 +889,11 @@ app.post('/api/instagram/dm-auto-reply/settings', (req, res) => {
       message: message.trim()
     });
 
-    // Store token if not already stored (needed for replying)
-    if (!tokenStore.has(userId)) {
-      tokenStore.set(userId, {
-        accessToken: token,
-        createdAt: new Date()
-      });
-    }
+    // Always update token (needed for replying after server restart)
+    tokenStore.set(userId, {
+      accessToken: token,
+      createdAt: new Date()
+    });
 
     console.log(`[DM-AutoReply] Settings saved for user ${userId}: enabled=${enabled}, delay=${delay}s`);
 
@@ -1000,6 +1012,25 @@ app.post('/api/instagram/subscribe-webhooks', async (req, res) => {
       });
     }
 
+    // First, get the user's Instagram ID so we can store the token
+    let igUserId = null;
+    try {
+      const meResponse = await axios.get(`${INSTAGRAM_CONFIG.graphBaseUrl}/me`, {
+        params: { fields: 'id', access_token: token }
+      });
+      igUserId = meResponse.data.id;
+      console.log('[Webhooks] Resolved IG user ID:', igUserId);
+
+      // Store token for this user (needed for auto-reply)
+      tokenStore.set(igUserId, {
+        accessToken: token,
+        createdAt: new Date()
+      });
+      console.log('[Webhooks] Token stored for user:', igUserId);
+    } catch (meErr) {
+      console.error('[Webhooks] Could not resolve user ID:', meErr.response?.data || meErr.message);
+    }
+
     console.log('[Webhooks] Subscribing to webhook fields: comments, messages');
 
     const response = await axios.post(
@@ -1018,7 +1049,9 @@ app.post('/api/instagram/subscribe-webhooks', async (req, res) => {
     res.json({
       success: true,
       message: 'Webhook subscriptions enabled for comments and messages',
-      data: response.data
+      data: response.data,
+      igUserId: igUserId,
+      tokenStored: !!igUserId
     });
 
   } catch (error) {
@@ -1227,6 +1260,157 @@ app.post('/api/instagram/data-deletion', (req, res) => {
     res.json({
       url: `${INSTAGRAM_CONFIG.frontendUrl}/data-deletion`,
       confirmation_code: `DEL-error-${Date.now()}`
+    });
+  }
+});
+
+// ==================== DEBUG ENDPOINTS ====================
+
+// Route: Debug Status (shows all stored states for debugging)
+app.get('/api/instagram/debug/status', (req, res) => {
+  const tokenEntries = [];
+  for (const [userId, data] of tokenStore.entries()) {
+    tokenEntries.push({
+      userId,
+      hasToken: !!data.accessToken,
+      tokenPreview: data.accessToken ? data.accessToken.substring(0, 20) + '...' : null,
+      createdAt: data.createdAt
+    });
+  }
+
+  const commentSettings = [];
+  for (const [userId, settings] of autoReplySettings.entries()) {
+    commentSettings.push({ userId, ...settings });
+  }
+
+  const dmSettings = [];
+  for (const [userId, settings] of dmAutoReplySettings.entries()) {
+    dmSettings.push({ userId, ...settings });
+  }
+
+  res.json({
+    success: true,
+    serverUptime: Math.round(process.uptime()) + 's',
+    tokens: {
+      count: tokenStore.size,
+      entries: tokenEntries
+    },
+    commentAutoReply: {
+      settingsCount: autoReplySettings.size,
+      settings: commentSettings,
+      logCount: autoReplyLog.length,
+      pendingReplies: pendingReplies.size,
+      recentLog: autoReplyLog.slice(0, 5)
+    },
+    dmAutoReply: {
+      settingsCount: dmAutoReplySettings.size,
+      settings: dmSettings,
+      logCount: dmAutoReplyLog.length,
+      pendingReplies: pendingDMReplies.size,
+      recentLog: dmAutoReplyLog.slice(0, 5)
+    },
+    webhooks: {
+      totalEventsReceived: webhookEventCount,
+      recentEvents: webhookEventLog.slice(0, 10)
+    }
+  });
+});
+
+// Route: Test Comment Webhook (simulates a comment webhook for debugging)
+app.post('/api/instagram/debug/test-comment-webhook', (req, res) => {
+  try {
+    const { userId, commentText, commentId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required (your Instagram user ID)'
+      });
+    }
+
+    const testCommentData = {
+      commentId: commentId || `test_${Date.now()}`,
+      text: commentText || 'This is a test comment',
+      username: 'test_user',
+      senderId: 'test_sender',
+      mediaId: 'test_media',
+      mediaProductType: 'FEED',
+      parentId: null,
+      timestamp: Date.now()
+    };
+
+    const settings = autoReplySettings.get(userId);
+    const tokenData = tokenStore.get(userId);
+
+    // Run the auto-reply flow
+    scheduleAutoReply(testCommentData, userId);
+
+    res.json({
+      success: true,
+      message: 'Test comment webhook simulated',
+      debug: {
+        userId,
+        settingsFound: !!settings,
+        settingsEnabled: settings?.enabled || false,
+        tokenFound: !!tokenData,
+        commentData: testCommentData
+      }
+    });
+
+  } catch (error) {
+    console.error('[Debug] Test webhook error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Route: Test DM Webhook (simulates a DM webhook for debugging)
+app.post('/api/instagram/debug/test-dm-webhook', (req, res) => {
+  try {
+    const { userId, messageText, senderId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required (your Instagram user ID)'
+      });
+    }
+
+    const testMessageData = {
+      id: `test_msg_${Date.now()}`,
+      senderId: senderId || 'test_sender_123',
+      recipientId: userId,
+      text: messageText || 'This is a test DM',
+      attachments: [],
+      timestamp: Date.now(),
+      received: new Date()
+    };
+
+    const settings = dmAutoReplySettings.get(userId);
+    const tokenData = tokenStore.get(userId);
+
+    // Run the DM auto-reply flow
+    scheduleDMAutoReply(testMessageData, userId);
+
+    res.json({
+      success: true,
+      message: 'Test DM webhook simulated',
+      debug: {
+        userId,
+        settingsFound: !!settings,
+        settingsEnabled: settings?.enabled || false,
+        tokenFound: !!tokenData,
+        messageData: testMessageData
+      }
+    });
+
+  } catch (error) {
+    console.error('[Debug] Test DM webhook error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
