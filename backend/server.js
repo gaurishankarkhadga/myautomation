@@ -160,17 +160,18 @@ async function sendDirectMessage(igUserId, recipientIGSID, message, accessToken)
 
 // Helper: Map webhook igUserId to stored userId (handles OAuth ID vs Business Account ID mismatch)
 function resolveUserIdMapping(igUserId) {
-  // Direct match - best case
-  if (autoReplySettings.has(igUserId) || dmAutoReplySettings.has(igUserId) || tokenStore.has(igUserId)) {
+  // Direct match - only if SETTINGS actually exist for this ID
+  const hasSettings = autoReplySettings.has(igUserId) || dmAutoReplySettings.has(igUserId);
+  if (hasSettings) {
     return igUserId;
   }
 
-  // No direct match - search all stored entries and create mapping
-  console.log(`[ID-Mapping] No direct match for ${igUserId}, searching stored entries...`);
+  // Settings not found for this ID - search all stored entries and sync
+  console.log(`[ID-Mapping] No settings for ${igUserId}, searching stored entries...`);
 
-  // Find any stored user that has settings or tokens
+  // Find any stored user that has settings
   let mappedId = null;
-  for (const [storedId] of tokenStore.entries()) {
+  for (const [storedId] of autoReplySettings.entries()) {
     if (storedId !== igUserId) {
       mappedId = storedId;
       break;
@@ -178,7 +179,16 @@ function resolveUserIdMapping(igUserId) {
   }
 
   if (!mappedId) {
-    for (const [storedId] of autoReplySettings.entries()) {
+    for (const [storedId] of dmAutoReplySettings.entries()) {
+      if (storedId !== igUserId) {
+        mappedId = storedId;
+        break;
+      }
+    }
+  }
+
+  if (!mappedId) {
+    for (const [storedId] of tokenStore.entries()) {
       if (storedId !== igUserId) {
         mappedId = storedId;
         break;
@@ -187,30 +197,30 @@ function resolveUserIdMapping(igUserId) {
   }
 
   if (mappedId) {
-    console.log(`[ID-Mapping] Found mapping: webhook ID ${igUserId} -> stored ID ${mappedId}`);
+    console.log(`[ID-Mapping] Syncing from stored ID ${mappedId} -> webhook ID ${igUserId}`);
 
-    // Copy token to new ID
+    // Copy token to webhook ID
     const tokenData = tokenStore.get(mappedId);
     if (tokenData) {
       tokenStore.set(igUserId, tokenData);
-      console.log(`[ID-Mapping] Token copied to ${igUserId}`);
+      console.log(`[ID-Mapping] Token synced to ${igUserId}`);
     }
 
-    // Copy comment auto-reply settings to new ID
+    // Copy comment auto-reply settings to webhook ID
     const commentSettings = autoReplySettings.get(mappedId);
     if (commentSettings) {
-      autoReplySettings.set(igUserId, commentSettings);
-      console.log(`[ID-Mapping] Comment auto-reply settings copied to ${igUserId}`);
+      autoReplySettings.set(igUserId, { ...commentSettings });
+      console.log(`[ID-Mapping] Comment auto-reply settings synced to ${igUserId}: enabled=${commentSettings.enabled}`);
     }
 
-    // Copy DM auto-reply settings to new ID
+    // Copy DM auto-reply settings to webhook ID
     const dmSettings = dmAutoReplySettings.get(mappedId);
     if (dmSettings) {
-      dmAutoReplySettings.set(igUserId, dmSettings);
-      console.log(`[ID-Mapping] DM auto-reply settings copied to ${igUserId}`);
+      dmAutoReplySettings.set(igUserId, { ...dmSettings });
+      console.log(`[ID-Mapping] DM auto-reply settings synced to ${igUserId}: enabled=${dmSettings.enabled}`);
     }
 
-    return igUserId; // Now the lookup will work
+    return igUserId;
   }
 
   console.log(`[ID-Mapping] No stored data found to map for ${igUserId}`);
