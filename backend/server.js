@@ -397,15 +397,16 @@ app.get('/api/instagram/callback', async (req, res) => {
     const expiresIn = longLivedResponse.data.expires_in;
     console.log('[OAuth] Long-lived token received (expires in', expiresIn, 'seconds)');
 
-    // Store token in memory
-    tokenStore.set(userId, {
+    // Store token in memory (always convert userId to string for consistency)
+    const userIdStr = String(userId);
+    tokenStore.set(userIdStr, {
       accessToken: longLivedToken,
       expiresIn,
       createdAt: new Date()
     });
 
     // Redirect to frontend with token and userId
-    res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?token=${longLivedToken}&userId=${userId}&expiresIn=${expiresIn}`);
+    res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?token=${longLivedToken}&userId=${userIdStr}&expiresIn=${expiresIn}`);
 
   } catch (error) {
     console.error('[OAuth] Callback error:', error.response?.data || error.message);
@@ -423,13 +424,17 @@ app.get('/api/instagram/webhook', (req, res) => {
     const challenge = req.query['hub.challenge'];
 
     console.log('[Webhook] Verification request received');
-    console.log('[Webhook] Mode:', mode, 'Token match:', token === WEBHOOK_VERIFY_TOKEN);
+    console.log('[Webhook] Mode:', mode);
+    console.log('[Webhook] Received token:', token);
+    console.log('[Webhook] Expected token:', WEBHOOK_VERIFY_TOKEN);
+    console.log('[Webhook] Token match:', token === WEBHOOK_VERIFY_TOKEN);
+    console.log('[Webhook] WEBHOOK_VERIFY_TOKEN env set:', !!WEBHOOK_VERIFY_TOKEN);
 
     if (mode === 'subscribe' && token === WEBHOOK_VERIFY_TOKEN) {
-      console.log('[Webhook] Verification successful');
+      console.log('[Webhook] Verification successful, sending challenge:', challenge);
       res.status(200).send(challenge);
     } else {
-      console.error('[Webhook] Verification failed - invalid token');
+      console.error('[Webhook] Verification failed - token mismatch or wrong mode');
       res.sendStatus(403);
     }
   } catch (error) {
@@ -463,7 +468,7 @@ app.post('/api/instagram/webhook', (req, res) => {
 
     if (body.object === 'instagram') {
       body.entry.forEach(entry => {
-        const igUserId = entry.id;
+        const igUserId = String(entry.id);
 
         // ---- Handle Comment Events (changes array) ----
         const changes = entry.changes || [];
@@ -1018,7 +1023,7 @@ app.post('/api/instagram/subscribe-webhooks', async (req, res) => {
       const meResponse = await axios.get(`${INSTAGRAM_CONFIG.graphBaseUrl}/me`, {
         params: { fields: 'id', access_token: token }
       });
-      igUserId = meResponse.data.id;
+      igUserId = String(meResponse.data.id);
       console.log('[Webhooks] Resolved IG user ID:', igUserId);
 
       // Store token for this user (needed for auto-reply)
@@ -1422,7 +1427,9 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     message: 'Instagram Graph API server running',
     storedTokens: tokenStore.size,
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    webhookVerifyTokenSet: !!WEBHOOK_VERIFY_TOKEN,
+    webhookUrl: `${process.env.NODE_ENV === 'production' ? 'https://myautomation-test3.onrender.com' : 'http://localhost:' + (process.env.PORT || 8000)}/api/instagram/webhook`
   });
 });
 
