@@ -158,8 +158,70 @@ async function sendDirectMessage(igUserId, recipientIGSID, message, accessToken)
   }
 }
 
+// Helper: Map webhook igUserId to stored userId (handles OAuth ID vs Business Account ID mismatch)
+function resolveUserIdMapping(igUserId) {
+  // Direct match - best case
+  if (autoReplySettings.has(igUserId) || dmAutoReplySettings.has(igUserId) || tokenStore.has(igUserId)) {
+    return igUserId;
+  }
+
+  // No direct match - search all stored entries and create mapping
+  console.log(`[ID-Mapping] No direct match for ${igUserId}, searching stored entries...`);
+
+  // Find any stored user that has settings or tokens
+  let mappedId = null;
+  for (const [storedId] of tokenStore.entries()) {
+    if (storedId !== igUserId) {
+      mappedId = storedId;
+      break;
+    }
+  }
+
+  if (!mappedId) {
+    for (const [storedId] of autoReplySettings.entries()) {
+      if (storedId !== igUserId) {
+        mappedId = storedId;
+        break;
+      }
+    }
+  }
+
+  if (mappedId) {
+    console.log(`[ID-Mapping] Found mapping: webhook ID ${igUserId} -> stored ID ${mappedId}`);
+
+    // Copy token to new ID
+    const tokenData = tokenStore.get(mappedId);
+    if (tokenData) {
+      tokenStore.set(igUserId, tokenData);
+      console.log(`[ID-Mapping] Token copied to ${igUserId}`);
+    }
+
+    // Copy comment auto-reply settings to new ID
+    const commentSettings = autoReplySettings.get(mappedId);
+    if (commentSettings) {
+      autoReplySettings.set(igUserId, commentSettings);
+      console.log(`[ID-Mapping] Comment auto-reply settings copied to ${igUserId}`);
+    }
+
+    // Copy DM auto-reply settings to new ID
+    const dmSettings = dmAutoReplySettings.get(mappedId);
+    if (dmSettings) {
+      dmAutoReplySettings.set(igUserId, dmSettings);
+      console.log(`[ID-Mapping] DM auto-reply settings copied to ${igUserId}`);
+    }
+
+    return igUserId; // Now the lookup will work
+  }
+
+  console.log(`[ID-Mapping] No stored data found to map for ${igUserId}`);
+  return igUserId;
+}
+
 // Helper: Schedule a delayed auto-reply
 function scheduleAutoReply(commentData, igUserId) {
+  // Resolve ID mapping (webhook ID may differ from OAuth ID)
+  igUserId = resolveUserIdMapping(igUserId);
+
   const settings = autoReplySettings.get(igUserId);
   if (!settings || !settings.enabled) {
     console.log('[AutoReply] Auto-reply disabled for user:', igUserId);
@@ -240,6 +302,9 @@ function scheduleAutoReply(commentData, igUserId) {
 
 // Helper: Schedule a delayed auto-reply to DM
 function scheduleDMAutoReply(messageData, igUserId) {
+  // Resolve ID mapping (webhook ID may differ from OAuth ID)
+  igUserId = resolveUserIdMapping(igUserId);
+
   const settings = dmAutoReplySettings.get(igUserId);
   if (!settings || !settings.enabled) {
     console.log('[DM-AutoReply] DM auto-reply disabled for user:', igUserId);
