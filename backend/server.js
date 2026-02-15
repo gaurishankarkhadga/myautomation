@@ -574,11 +574,17 @@ app.post('/api/instagram/webhook', (req, res) => {
         const messaging = entry.messaging || [];
 
         messaging.forEach(event => {
-          const senderId = event.sender.id;
-          const recipientId = event.recipient.id;
+          const senderId = String(event.sender.id);
+          const recipientId = String(event.recipient.id);
 
           // Handle message event
           if (event.message) {
+            // Skip echo messages (messages sent BY the page account)
+            if (event.message.is_echo) {
+              console.log('[Webhook] Skipping echo message (sent by page)');
+              return;
+            }
+
             const messageData = {
               id: event.message.mid,
               senderId,
@@ -590,7 +596,9 @@ app.post('/api/instagram/webhook', (req, res) => {
             };
 
             console.log('[Webhook] Message received from:', senderId);
+            console.log('[Webhook] Message recipient:', recipientId);
             console.log('[Webhook] Message text:', messageData.text);
+            console.log('[Webhook] Entry igUserId:', igUserId);
 
             // Store message
             if (!messageStore.has(senderId)) {
@@ -611,8 +619,9 @@ app.post('/api/instagram/webhook', (req, res) => {
 
             console.log('[Webhook] Message stored. Total messages from sender:', messageStore.get(senderId).length);
 
-            // Trigger DM auto-reply if enabled
-            scheduleDMAutoReply(messageData, recipientId);
+            // Trigger DM auto-reply using igUserId (entry.id = your IG account)
+            // NOT recipientId which can be different for echo/cross-account events
+            scheduleDMAutoReply(messageData, igUserId);
           }
 
           // Handle reaction event
