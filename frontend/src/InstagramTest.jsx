@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import InstaProfile from './components/InstaProfile';
 import './InstagramTest.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -39,10 +40,23 @@ function InstagramTest() {
 
         if (errorParam) {
             setError(`OAuth Error: ${errorParam}`);
-        } else if (tokenParam) {
+        } else if (tokenParam && userIdParam) {
+            // Save to localStorage
+            localStorage.setItem('insta_token', tokenParam);
+            localStorage.setItem('insta_user_id', userIdParam);
+
             setToken(tokenParam);
-            setUserId(userIdParam || '');
+            setUserId(userIdParam);
             window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+            // Check localStorage
+            const storedToken = localStorage.getItem('insta_token');
+            const storedUserId = localStorage.getItem('insta_user_id');
+
+            if (storedToken && storedUserId) {
+                setToken(storedToken);
+                setUserId(storedUserId);
+            }
         }
     }, []);
 
@@ -74,6 +88,15 @@ function InstagramTest() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleDisconnect = () => {
+        setToken('');
+        setUserId('');
+        setProfile(null);
+        setMedia(null);
+        localStorage.removeItem('insta_token');
+        localStorage.removeItem('insta_user_id');
     };
 
     const fetchProfile = async () => {
@@ -331,7 +354,7 @@ function InstagramTest() {
                         <div className="token-info">
                             <p><strong>Connected</strong></p>
                             <p className="user-id">User ID: {userId}</p>
-                            <button onClick={() => { setToken(''); setProfile(null); setMedia(null); }} className="btn-secondary">
+                            <button onClick={handleDisconnect} className="btn-secondary">
                                 Disconnect
                             </button>
                         </div>
@@ -367,37 +390,10 @@ function InstagramTest() {
                             </button>
                         </div>
 
-                        {profile && (
-                            <div className="profile-card">
-                                <h2>Profile Data</h2>
-                                <div className="profile-content">
-                                    <img
-                                        src={profile.profile_picture_url}
-                                        alt={profile.username}
-                                        className="profile-pic"
-                                    />
-                                    <div className="profile-info">
-                                        <h3>@{profile.username}</h3>
-                                        <p className="account-type">{profile.account_type}</p>
-                                        {profile.biography && <p className="bio">{profile.biography}</p>}
-                                        <div className="stats">
-                                            <div className="stat">
-                                                <strong>{profile.media_count}</strong>
-                                                <span>Posts</span>
-                                            </div>
-                                            <div className="stat">
-                                                <strong>{profile.followers_count?.toLocaleString()}</strong>
-                                                <span>Followers</span>
-                                            </div>
-                                            <div className="stat">
-                                                <strong>{profile.follows_count?.toLocaleString()}</strong>
-                                                <span>Following</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        <InstaProfile
+                            profile={profile}
+                            onDisconnect={handleDisconnect}
+                        />
 
                         {/* ==================== COMMENT AUTO-REPLY SECTION ==================== */}
                         <div className="auto-reply-section">

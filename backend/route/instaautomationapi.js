@@ -466,6 +466,57 @@ router.get('/callback', async (req, res) => {
     }
 });
 
+// ==================== USER PROFILE ROUTE ====================
+
+// Route: Get User Profile (using stored token)
+router.get('/profile', async (req, res) => {
+    try {
+        const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+
+        if (!token) {
+            return res.status(401).json({
+                success: false,
+                error: 'Access token required'
+            });
+        }
+
+        console.log('[Profile] Fetching profile data...');
+
+        // Fetch user profile from Instagram Graph API
+        const response = await axios.get(`${INSTAGRAM_CONFIG.graphBaseUrl}/me`, {
+            params: {
+                fields: 'id,username,account_type,media_count,followers_count,follows_count,biography,profile_picture_url',
+                access_token: token
+            }
+        });
+
+        console.log('[Profile] Profile fetched for:', response.data.username);
+
+        res.json({
+            success: true,
+            data: response.data
+        });
+
+    } catch (error) {
+        console.error('[Profile] Fetch error:', error.response?.data || error.message);
+
+        // Handle token expiry
+        if (error.response?.data?.error?.code === 190) {
+            return res.status(401).json({
+                success: false,
+                error: 'Token expired',
+                code: 190
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch profile',
+            message: error.message
+        });
+    }
+});
+
 // ==================== WEBHOOK ROUTES ====================
 
 // Route: Verify Webhook (required by Facebook)
