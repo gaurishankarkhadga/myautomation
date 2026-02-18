@@ -14,6 +14,8 @@ const {
     Conversation,
     WebhookEvent
 } = require('../model/Instaautomation');
+const CreatorPersona = require('../model/CreatorPersona');
+const aiService = require('../service/aiService');
 
 // Instagram Graph API Configuration
 const INSTAGRAM_CONFIG = {
@@ -59,6 +61,8 @@ function verifyWebhookSignature(req) {
     return isValid;
 }
 
+
+// this is only for th comment and message for access token and we can add as best replay
 async function replyToComment(commentId, message, accessToken) {
     try {
         console.log('[AutoReply] Replying to comment:', commentId);
@@ -230,8 +234,29 @@ async function scheduleAutoReply(commentData, igUserId) {
         return;
     }
 
-    const delayMs = (settings.delaySeconds || 10) * 1000;
-    console.log(`[AutoReply] Scheduling reply in ${settings.delaySeconds}s for comment: ${commentData.commentId}`);
+    let replyMessage = settings.message;
+    let delaySeconds = settings.delaySeconds || 10;
+
+    // AI Mimicry Logic
+    try {
+        const persona = await CreatorPersona.findOne({ userId: igUserId });
+        if (persona) {
+            console.log('[AutoReply] Persona found, generating AI reply...');
+            const aiResponse = await aiService.generateSmartReply(igUserId, commentData.text, 'comment', commentData.username);
+
+            if (aiResponse) {
+                replyMessage = aiResponse;
+                // Random delay 10-50s
+                delaySeconds = Math.floor(Math.random() * (50 - 10 + 1)) + 10;
+                console.log(`[AutoReply] AI Reply generated: "${replyMessage}"`);
+            }
+        }
+    } catch (err) {
+        console.error('[AutoReply] AI generation failed, falling back to static settings:', err.message);
+    }
+
+    const delayMs = delaySeconds * 1000;
+    console.log(`[AutoReply] Scheduling reply in ${delaySeconds}s (${delayMs}ms) for comment: ${commentData.commentId}`);
 
     // Add log entry as 'pending'
     const logEntry = await AutoReplyLog.create({
@@ -239,7 +264,7 @@ async function scheduleAutoReply(commentData, igUserId) {
         commentText: commentData.text,
         commenterUsername: commentData.username,
         mediaId: commentData.mediaId,
-        replyText: settings.message,
+        replyText: replyMessage,
         status: 'pending',
         error: null,
         scheduledAt: new Date(),
@@ -247,7 +272,7 @@ async function scheduleAutoReply(commentData, igUserId) {
     });
 
     const timeoutId = setTimeout(async () => {
-        const result = await replyToComment(commentData.commentId, settings.message, tokenData.accessToken);
+        const result = await replyToComment(commentData.commentId, replyMessage, tokenData.accessToken);
 
         // Update log entry in DB
         await AutoReplyLog.findByIdAndUpdate(logEntry._id, {
@@ -304,14 +329,40 @@ async function scheduleDMAutoReply(messageData, igUserId) {
         return;
     }
 
-    const delayMs = (settings.delaySeconds || 10) * 1000;
-    console.log(`[DM-AutoReply] Scheduling DM reply in ${settings.delaySeconds}s for sender: ${senderId}`);
+    let replyMessage = settings.message;
+    let delaySeconds = settings.delaySeconds || 10;
+
+    // AI Mimicry Logic
+    try {
+        const persona = await CreatorPersona.findOne({ userId: igUserId });
+        if (persona) {
+            console.log('[DM-AutoReply] Persona found, generating AI reply...');
+            // For DMs, we might not have the sender's username easily available in the messageData if it's not enriched, 
+            // but we can pass a generic name or handle it in the prompt. 
+            // In the webhook event, we might need to fetch the user profile if we want their name, 
+            // but for now let's use "Friend" or try to find a name if available.
+            // Actually, messageData doesn't have the username. We will pass "there" or standard fallback.
+            const aiResponse = await aiService.generateSmartReply(igUserId, messageData.text, 'dm', 'there');
+
+            if (aiResponse) {
+                replyMessage = aiResponse;
+                // Random delay 4-5s
+                delaySeconds = Math.floor(Math.random() * (5 - 4 + 1)) + 4;
+                console.log(`[DM-AutoReply] AI Reply generated: "${replyMessage}"`);
+            }
+        }
+    } catch (err) {
+        console.error('[DM-AutoReply] AI generation failed, falling back to static settings:', err.message);
+    }
+
+    const delayMs = delaySeconds * 1000;
+    console.log(`[DM-AutoReply] Scheduling DM reply in ${delaySeconds}s for sender: ${senderId}`);
 
     // Add log entry as 'pending'
     const logEntry = await DmAutoReplyLog.create({
         senderId,
         messageText: messageData.text,
-        replyText: settings.message,
+        replyText: replyMessage,
         status: 'pending',
         error: null,
         scheduledAt: new Date(),
@@ -319,7 +370,7 @@ async function scheduleDMAutoReply(messageData, igUserId) {
     });
 
     const timeoutId = setTimeout(async () => {
-        const result = await sendDirectMessage(igUserId, senderId, settings.message, tokenData.accessToken);
+        const result = await sendDirectMessage(igUserId, senderId, replyMessage, tokenData.accessToken);
 
         // Update log entry in DB
         await DmAutoReplyLog.findByIdAndUpdate(logEntry._id, {
