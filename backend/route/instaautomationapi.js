@@ -237,22 +237,19 @@ async function scheduleAutoReply(commentData, igUserId) {
     let replyMessage = settings.message;
     let delaySeconds = settings.delaySeconds || 10;
 
-    // AI Mimicry Logic
-    try {
-        const persona = await CreatorPersona.findOne({ userId: igUserId });
-        if (persona) {
-            console.log('[AutoReply] Persona found, generating AI reply...');
+    // If message is empty, use AI
+    if (!replyMessage || replyMessage.trim() === '') {
+        console.log('[AutoReply] Message empty, using AI generation...');
+        try {
             const aiResponse = await aiService.generateSmartReply(igUserId, commentData.text, 'comment', commentData.username);
-
-            if (aiResponse) {
-                replyMessage = aiResponse;
-                // Random delay 10-50s
-                delaySeconds = Math.floor(Math.random() * (50 - 10 + 1)) + 10;
-                console.log(`[AutoReply] AI Reply generated: "${replyMessage}"`);
-            }
+            replyMessage = aiResponse;
+            // Random delay 10-50s
+            delaySeconds = Math.floor(Math.random() * (50 - 10 + 1)) + 10;
+            console.log(`[AutoReply] AI Reply generated: "${replyMessage}"`);
+        } catch (err) {
+            console.error('[AutoReply] AI generation failed:', err.message);
+            replyMessage = "Thanks for the comment! 👍";
         }
-    } catch (err) {
-        console.error('[AutoReply] AI generation failed, falling back to static settings:', err.message);
     }
 
     const delayMs = delaySeconds * 1000;
@@ -332,27 +329,19 @@ async function scheduleDMAutoReply(messageData, igUserId) {
     let replyMessage = settings.message;
     let delaySeconds = settings.delaySeconds || 10;
 
-    // AI Mimicry Logic
-    try {
-        const persona = await CreatorPersona.findOne({ userId: igUserId });
-        if (persona) {
-            console.log('[DM-AutoReply] Persona found, generating AI reply...');
-            // For DMs, we might not have the sender's username easily available in the messageData if it's not enriched, 
-            // but we can pass a generic name or handle it in the prompt. 
-            // In the webhook event, we might need to fetch the user profile if we want their name, 
-            // but for now let's use "Friend" or try to find a name if available.
-            // Actually, messageData doesn't have the username. We will pass "there" or standard fallback.
+    // If message is empty, use AI
+    if (!replyMessage || replyMessage.trim() === '') {
+        console.log('[DM-AutoReply] Message empty, using AI generation...');
+        try {
             const aiResponse = await aiService.generateSmartReply(igUserId, messageData.text, 'dm', 'there');
-
-            if (aiResponse) {
-                replyMessage = aiResponse;
-                // Random delay 4-5s
-                delaySeconds = Math.floor(Math.random() * (5 - 4 + 1)) + 4;
-                console.log(`[DM-AutoReply] AI Reply generated: "${replyMessage}"`);
-            }
+            replyMessage = aiResponse;
+            // Random delay 4-5s
+            delaySeconds = Math.floor(Math.random() * (5 - 4 + 1)) + 4;
+            console.log(`[DM-AutoReply] AI Reply generated: "${replyMessage}"`);
+        } catch (err) {
+            console.error('[DM-AutoReply] AI generation failed:', err.message);
+            replyMessage = "Thanks for reaching out! ❤️";
         }
-    } catch (err) {
-        console.error('[DM-AutoReply] AI generation failed, falling back to static settings:', err.message);
     }
 
     const delayMs = delaySeconds * 1000;

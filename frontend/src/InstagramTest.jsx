@@ -440,7 +440,7 @@ function InstagramTest() {
                                         <textarea
                                             value={autoReplyMessage}
                                             onChange={(e) => setAutoReplyMessage(e.target.value)}
-                                            placeholder="Enter your auto-reply message..."
+                                            placeholder="Leave empty to use AI-generated reply..."
                                             rows={3}
                                             maxLength={300}
                                             className="reply-textarea"
@@ -452,7 +452,7 @@ function InstagramTest() {
                                 <div className="setting-actions">
                                     <button
                                         onClick={saveAutoReplySettings}
-                                        disabled={autoReplySaving || !autoReplyMessage.trim()}
+                                        disabled={autoReplySaving}
                                         className="btn-save"
                                     >
                                         {autoReplySaving ? 'Saving...' : '💾 Save Settings'}
@@ -556,7 +556,7 @@ function InstagramTest() {
                                         <textarea
                                             value={dmAutoReplyMessage}
                                             onChange={(e) => setDmAutoReplyMessage(e.target.value)}
-                                            placeholder="Enter your DM auto-reply message..."
+                                            placeholder="Leave empty to use AI-generated reply..."
                                             rows={3}
                                             maxLength={1000}
                                             className="reply-textarea"
@@ -568,7 +568,8 @@ function InstagramTest() {
                                 <div className="setting-actions">
                                     <button
                                         onClick={saveDmAutoReplySettings}
-                                        disabled={dmAutoReplySaving || !dmAutoReplyMessage.trim()}
+                                        onClick={saveDmAutoReplySettings}
+                                        disabled={dmAutoReplySaving}
                                         className="btn-save"
                                     >
                                         {dmAutoReplySaving ? 'Saving...' : '💾 Save DM Settings'}

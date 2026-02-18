@@ -13,7 +13,7 @@ const autoReplySettingSchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true, index: true },
     enabled: { type: Boolean, default: false },
     delaySeconds: { type: Number, default: 10, min: 5, max: 300 },
-    message: { type: String, required: true }
+    message: { type: String, default: '' }
 });
 
 // ==================== AUTO-REPLY SETTINGS (DMs) ====================
@@ -21,7 +21,7 @@ const dmAutoReplySettingSchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true, index: true },
     enabled: { type: Boolean, default: false },
     delaySeconds: { type: Number, default: 10, min: 5, max: 300 },
-    message: { type: String, required: true }
+    message: { type: String, default: '' }
 });
 
 // ==================== AUTO-REPLY LOG (Comments) ====================
