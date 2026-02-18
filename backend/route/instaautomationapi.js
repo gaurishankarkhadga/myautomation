@@ -199,6 +199,9 @@ async function scheduleAutoReply(commentData, igUserId) {
     igUserId = await resolveUserIdMapping(igUserId);
 
     const settings = await AutoReplySetting.findOne({ userId: igUserId });
+    console.log(`[AutoReply] Settings found for ${igUserId}:`, settings ? 'Yes' : 'No');
+    if (settings) console.log(`[AutoReply] Enabled: ${settings.enabled}, Message: "${settings.message}"`);
+
     if (!settings || !settings.enabled) {
         console.log('[AutoReply] Auto-reply disabled for user:', igUserId);
         return;
@@ -239,13 +242,18 @@ async function scheduleAutoReply(commentData, igUserId) {
 
     // If message is empty, use AI
     if (!replyMessage || replyMessage.trim() === '') {
-        console.log('[AutoReply] Message empty, using AI generation...');
+        console.log('[AutoReply] Message field is empty. Attempting AI generation...');
         try {
-            const aiResponse = await aiService.generateSmartReply(igUserId, commentData.text, 'comment', commentData.username);
-            replyMessage = aiResponse;
-            // Random delay 10-50s
-            delaySeconds = Math.floor(Math.random() * (50 - 10 + 1)) + 10;
-            console.log(`[AutoReply] AI Reply generated: "${replyMessage}"`);
+            const persona = await CreatorPersona.findOne({ userId: igUserId });
+            console.log(`[AutoReply] Persona found for ${igUserId}:`, persona ? 'Yes' : 'No');
+
+            if (persona) {
+                const aiResponse = await aiService.generateSmartReply(igUserId, commentData.text, 'comment', commentData.username);
+                replyMessage = aiResponse;
+                // Random delay 10-50s
+                delaySeconds = Math.floor(Math.random() * (50 - 10 + 1)) + 10;
+                console.log(`[AutoReply] AI Reply generated: "${replyMessage}"`);
+            }
         } catch (err) {
             console.error('[AutoReply] AI generation failed:', err.message);
             replyMessage = "Thanks for the comment! 👍";
@@ -900,12 +908,8 @@ router.post('/auto-reply/settings', async (req, res) => {
             });
         }
 
-        if (!message || message.trim().length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'Reply message cannot be empty'
-            });
-        }
+        // Allow empty message for AI generation
+        // if (!message || message.trim().length === 0) { ... }
 
         const delay = Math.min(Math.max(parseInt(delaySeconds) || 10, 5), 300);
 
@@ -915,7 +919,7 @@ router.post('/auto-reply/settings', async (req, res) => {
                 userId,
                 enabled: Boolean(enabled),
                 delaySeconds: delay,
-                message: message.trim()
+                message: message ? message.trim() : ''
             },
             { upsert: true, new: true }
         );
@@ -1053,12 +1057,8 @@ router.post('/dm-auto-reply/settings', async (req, res) => {
             });
         }
 
-        if (!message || message.trim().length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'Reply message cannot be empty'
-            });
-        }
+        // Allow empty message for AI generation
+        // if (!message || message.trim().length === 0) { ... }
 
         const delay = Math.min(Math.max(parseInt(delaySeconds) || 10, 5), 300);
 
@@ -1068,7 +1068,7 @@ router.post('/dm-auto-reply/settings', async (req, res) => {
                 userId,
                 enabled: Boolean(enabled),
                 delaySeconds: delay,
-                message: message.trim()
+                message: message ? message.trim() : ''
             },
             { upsert: true, new: true }
         );

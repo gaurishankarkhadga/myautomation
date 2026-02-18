@@ -568,7 +568,6 @@ function InstagramTest() {
                                 <div className="setting-actions">
                                     <button
                                         onClick={saveDmAutoReplySettings}
-                                        onClick={saveDmAutoReplySettings}
                                         disabled={dmAutoReplySaving}
                                         className="btn-save"
                                     >
