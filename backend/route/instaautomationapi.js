@@ -69,10 +69,11 @@ async function replyToComment(commentId, message, accessToken) {
 
         const response = await axios.post(
             `${INSTAGRAM_CONFIG.graphBaseUrl}/${commentId}/replies`,
-            null,
+            {
+                message: message
+            },
             {
                 params: {
-                    message: message,
                     access_token: accessToken
                 }
             }
