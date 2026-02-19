@@ -244,16 +244,13 @@ async function scheduleAutoReply(commentData, igUserId) {
     if (!replyMessage || replyMessage.trim() === '') {
         console.log('[AutoReply] Message field is empty. Attempting AI generation...');
         try {
-            const persona = await CreatorPersona.findOne({ userId: igUserId });
-            console.log(`[AutoReply] Persona found for ${igUserId}:`, persona ? 'Yes' : 'No');
+            // Call AI service directly (it handles fallback if persona missing)
+            const aiResponse = await aiService.generateSmartReply(igUserId, commentData.text, 'comment', commentData.username);
+            replyMessage = aiResponse;
 
-            if (persona) {
-                const aiResponse = await aiService.generateSmartReply(igUserId, commentData.text, 'comment', commentData.username);
-                replyMessage = aiResponse;
-                // Random delay 10-50s
-                delaySeconds = Math.floor(Math.random() * (50 - 10 + 1)) + 10;
-                console.log(`[AutoReply] AI Reply generated: "${replyMessage}"`);
-            }
+            // Random delay 10-50s
+            delaySeconds = Math.floor(Math.random() * (50 - 10 + 1)) + 10;
+            console.log(`[AutoReply] AI Reply generated: "${replyMessage}"`);
         } catch (err) {
             console.error('[AutoReply] AI generation failed:', err.message);
             replyMessage = "Thanks for the comment! 👍";
