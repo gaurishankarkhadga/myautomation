@@ -3,15 +3,34 @@ const mongoose = require('mongoose');
 const creatorPersonaSchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true, index: true },
     analysisTimestamp: { type: Date, default: Date.now },
-    communicationStyle: { type: String, default: "friendly and professional" }, // Description of style
-    toneKeywords: { type: [String], default: [] }, // e.g., ["excited", "grateful", "concise"]
-    commonPhrases: { type: [String], default: [] }, // Examples from past posts/replies
-    emojiUsage: { type: String }, // e.g., "Frequent use of ✨ and 🔥"
-    sentenceLength: { type: String }, // e.g., "Short and punchy" or "Long and detailed"
+    dataSource: { type: String, enum: ['captions_only', 'captions_and_replies'], default: 'captions_only' },
+    replyPairsAnalyzed: { type: Number, default: 0 },
+
+    // Style analysis (from captions + replies)
+    communicationStyle: { type: String, default: 'friendly and professional' },
+    toneKeywords: { type: [String], default: [] },
+    commonPhrases: { type: [String], default: [] },
+    emojiUsage: { type: String },
+    emojiFrequency: { type: String, enum: ['heavy', 'moderate', 'rare', 'none'], default: 'moderate' },
+    sentenceLength: { type: String },
+
+    // Reply-specific analysis (from actual comment replies)
+    replyStyle: { type: String },
+    averageReplyLength: { type: Number },
+    lowercasePreference: { type: Boolean, default: false },
+    slangPatterns: { type: [String], default: [] },
+
+    // Actual reply examples collected from Instagram
+    replyExamples: [{
+        commentText: String,
+        creatorReply: String
+    }],
+
+    // AI-generated sample replies based on analysis
     sampleReplies: [{
         context: String,
         reply: String
-    }] // Few-shot examples
+    }]
 });
 
 module.exports = mongoose.model('CreatorPersona', creatorPersonaSchema);

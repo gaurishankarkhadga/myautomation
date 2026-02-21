@@ -516,6 +516,12 @@ router.get('/callback', async (req, res) => {
             { upsert: true, new: true }
         );
 
+        // Auto-trigger persona analysis in background (non-blocking)
+        console.log('[OAuth] Triggering persona analysis in background...');
+        aiService.analyzeProfile(userIdStr, longLivedToken)
+            .then(result => console.log('[OAuth] Persona analysis result:', JSON.stringify(result)))
+            .catch(err => console.error('[OAuth] Persona analysis failed:', err.message));
+
         // Redirect to frontend with token and userId
         res.redirect(`${INSTAGRAM_CONFIG.frontendUrl}?token=${longLivedToken}&userId=${userIdStr}&expiresIn=${expiresIn}`);
 
@@ -571,6 +577,83 @@ router.get('/profile', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to fetch profile',
+            message: error.message
+        });
+    }
+});
+
+// ==================== PERSONA / AI ANALYSIS ROUTES ====================
+
+// Route: Manually trigger persona analysis
+router.post('/analyze-style', async (req, res) => {
+    try {
+        const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+        const { userId } = req.body;
+
+        if (!token || !userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'token and userId are required'
+            });
+        }
+
+        console.log(`[Persona] Manual analysis triggered for user: ${userId}`);
+        const result = await aiService.analyzeProfile(userId, token);
+
+        res.json({
+            success: result.success,
+            data: result
+        });
+
+    } catch (error) {
+        console.error('[Persona] Analysis endpoint error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Analysis failed',
+            message: error.message
+        });
+    }
+});
+
+// Route: Get persona status and details
+router.get('/persona-status', async (req, res) => {
+    try {
+        const { userId } = req.query;
+
+        if (!userId) {
+            return res.status(400).json({ success: false, error: 'userId query param required' });
+        }
+
+        const persona = await CreatorPersona.findOne({ userId });
+
+        if (!persona) {
+            return res.json({
+                success: true,
+                hasPersona: false,
+                message: 'No persona found. Connect Instagram and it will auto-analyze.'
+            });
+        }
+
+        res.json({
+            success: true,
+            hasPersona: true,
+            dataSource: persona.dataSource,
+            replyPairsAnalyzed: persona.replyPairsAnalyzed,
+            analysisTimestamp: persona.analysisTimestamp,
+            communicationStyle: persona.communicationStyle,
+            replyStyle: persona.replyStyle,
+            emojiFrequency: persona.emojiFrequency,
+            averageReplyLength: persona.averageReplyLength,
+            lowercasePreference: persona.lowercasePreference,
+            slangPatterns: persona.slangPatterns,
+            toneKeywords: persona.toneKeywords
+        });
+
+    } catch (error) {
+        console.error('[Persona] Status endpoint error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch persona status',
             message: error.message
         });
     }
