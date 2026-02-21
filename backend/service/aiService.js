@@ -114,43 +114,68 @@ async function analyzeProfile(userId, accessToken) {
  */
 async function generateSmartReply(userId, incomingText, contextType, senderName) {
     try {
-        // 1. Load Persona
+        // 1. Load Persona (optional - enhances replies but not required)
         const persona = await CreatorPersona.findOne({ userId });
 
-        if (!persona) {
-            console.log(`[AI-Service] No persona found for ${userId}, using generic fallback.`);
-            return "Thanks for reaching out! ❤️"; // Fallback
+        let prompt;
+
+        if (persona) {
+            console.log(`[AI-Service] Persona found for ${userId}, generating personalized reply.`);
+            // Persona-based prompt for personalized replies
+            prompt = `
+            You are an AI assistant acting as the Instagram creator who has this persona:
+            - Style: ${persona.communicationStyle}
+            - Tone: ${persona.toneKeywords.join(', ')}
+            - Common Phrases: ${persona.commonPhrases.join(', ')}
+            - Emoji Usage: ${persona.emojiUsage}
+            
+            Task: Write a ${contextType === 'dm' ? 'Direct Message' : 'Comment'} reply to @${senderName}.
+            
+            Incoming Message: "${incomingText}"
+            
+            Guidelines:
+            - Be natural and authentic to the persona.
+            - Keep it concise (Instagram style).
+            - Use appropriate emojis if the persona dictates.
+            - Do not use hashtags unless typical for a reply.
+            - STRICTLY output ONLY the reply text, no quotes or explanations.
+            `;
+        } else {
+            console.log(`[AI-Service] No persona found for ${userId}, generating generic AI reply via Gemini.`);
+            // Generic prompt - still uses Gemini for contextual replies
+            prompt = `
+            You are a friendly and engaging Instagram creator replying to a ${contextType === 'dm' ? 'Direct Message' : 'comment'} on your post.
+            
+            @${senderName} said: "${incomingText}"
+            
+            Write a short, warm, and natural reply. Guidelines:
+            - Keep it under 100 characters.
+            - Be conversational and authentic (Instagram style).
+            - Use 1-2 relevant emojis max.
+            - Do NOT use hashtags.
+            - STRICTLY output ONLY the reply text, no quotes, no explanations, no extra formatting.
+            `;
         }
 
-        // 2. Prepare Prompt
-        const prompt = `
-        You are an AI assistant acting as the Instagram creator who has this persona:
-        - Style: ${persona.communicationStyle}
-        - Tone: ${persona.toneKeywords.join(', ')}
-        - Common Phrases: ${persona.commonPhrases.join(', ')}
-        - Emoji Usage: ${persona.emojiUsage}
-        
-        Task: Write a ${contextType === 'dm' ? 'Direct Message' : 'Comment'} reply to @${senderName}.
-        
-        Incoming Message: "${incomingText}"
-        
-        Guidelines:
-        - Be natural and authentic to the persona.
-        - Keep it concise (Instagram style).
-        - Use appropriate emojis if the persona dictates.
-        - Do not use hashtags unless typical for a reply.
-        - STRICTLY output ONLY the reply text, no quotes or explanations.
-        `;
-
-        // 3. Call Gemini
+        // 2. Call Gemini
+        console.log(`[AI-Service] Calling Gemini 2.5 Flash for reply generation...`);
         const result = await model.generateContent(prompt);
         const reply = result.response.text().trim();
 
-        return reply;
+        // Remove surrounding quotes if Gemini wraps the reply
+        const cleanReply = reply.replace(/^["']|["']$/g, '');
+
+        if (!cleanReply || cleanReply.length === 0) {
+            console.warn('[AI-Service] Gemini returned empty reply, using safe fallback.');
+            return "Thanks for your comment! 🙌";
+        }
+
+        console.log(`[AI-Service] Gemini reply generated successfully: "${cleanReply}"`);
+        return cleanReply;
 
     } catch (error) {
         console.error('[AI-Service] Reply generation failed:', error.message);
-        return "Thanks! 🔥"; // Safe fallback
+        return "Thanks! 🔥"; // Safe fallback only on actual errors
     }
 }
 

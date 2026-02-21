@@ -188,6 +188,19 @@ async function resolveUserIdMapping(igUserId) {
             console.log(`[ID-Mapping] DM auto-reply settings synced to ${igUserId}: enabled=${dmSettings.enabled}`);
         }
 
+        // Copy CreatorPersona to webhook ID (for AI-powered replies)
+        const personaData = await CreatorPersona.findOne({ userId: mappedId });
+        if (personaData) {
+            const personaObj = personaData.toObject();
+            delete personaObj._id;
+            await CreatorPersona.findOneAndUpdate(
+                { userId: igUserId },
+                { ...personaObj, userId: igUserId },
+                { upsert: true }
+            );
+            console.log(`[ID-Mapping] CreatorPersona synced to ${igUserId}`);
+        }
+
         return igUserId;
     }
 
