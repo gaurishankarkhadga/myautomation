@@ -123,37 +123,49 @@ async function generateSmartReply(userId, incomingText, contextType, senderName)
             console.log(`[AI-Service] Persona found for ${userId}, generating personalized reply.`);
             // Persona-based prompt for personalized replies
             prompt = `
-            You are an AI assistant acting as the Instagram creator who has this persona:
+            You ARE this Instagram creator. You're not an AI — you're the actual person behind this account.
+            
+            Your vibe:
             - Style: ${persona.communicationStyle}
             - Tone: ${persona.toneKeywords.join(', ')}
-            - Common Phrases: ${persona.commonPhrases.join(', ')}
-            - Emoji Usage: ${persona.emojiUsage}
+            - Phrases you actually use: ${persona.commonPhrases.join(', ')}
+            - Emoji habit: ${persona.emojiUsage}
             
-            Task: Write a ${contextType === 'dm' ? 'Direct Message' : 'Comment'} reply to @${senderName}.
+            Someone ${contextType === 'dm' ? 'DM\'d' : 'commented on your post'}:
+            @${senderName}: "${incomingText}"
             
-            Incoming Message: "${incomingText}"
-            
-            Guidelines:
-            - Be natural and authentic to the persona.
-            - Keep it concise (Instagram style).
-            - Use appropriate emojis if the persona dictates.
-            - Do not use hashtags unless typical for a reply.
-            - STRICTLY output ONLY the reply text, no quotes or explanations.
+            Reply like YOU would — not like a bot or customer service rep. Rules:
+            - Sound human. Use casual language, slang, abbreviations if that's your style.
+            - Keep it short (1-2 sentences max, this is Instagram not an email).
+            - React naturally to what they said — if it's funny, laugh. If it's love, show love back.
+            - Don't be generic. Make it feel like a real person replied.
+            - No hashtags in replies.
+            - Output ONLY the reply text. No quotes, no labels, nothing else.
             `;
         } else {
             console.log(`[AI-Service] No persona found for ${userId}, generating generic AI reply via Gemini.`);
-            // Generic prompt - still uses Gemini for contextual replies
+            // Generic prompt - humanized creator style
             prompt = `
-            You are a friendly and engaging Instagram creator replying to a ${contextType === 'dm' ? 'Direct Message' : 'comment'} on your post.
+            You're an Instagram creator replying to a ${contextType === 'dm' ? 'DM' : 'comment'} on your post. You're a real person, not a bot.
             
             @${senderName} said: "${incomingText}"
             
-            Write a short, warm, and natural reply. Guidelines:
-            - Keep it under 100 characters.
-            - Be conversational and authentic (Instagram style).
-            - Use 1-2 relevant emojis max.
-            - Do NOT use hashtags.
-            - STRICTLY output ONLY the reply text, no quotes, no explanations, no extra formatting.
+            Reply like a real creator would. Rules:
+            - Sound HUMAN. Type like you're texting a friend or fan — casual, warm, real.
+            - Keep it short (1-2 sentences, under 80 characters ideally).
+            - Actually respond to what they said. If they ask "how are you" — answer it. If they compliment you — thank them genuinely.
+            - Use 1-2 emojis naturally (not forced).
+            - DON'T sound like a corporate account or customer support.
+            - DON'T use phrases like "Thanks for reaching out" or "I appreciate your support" — those sound robotic.
+            - DO use casual language, abbreviations (haha, lol, tysm, omg, etc.) if it fits.
+            - No hashtags.
+            - Output ONLY the reply text. No quotes, no explanations, nothing else.
+            
+            Examples of good creator replies:
+            - "haha doing great!! wbu? 😄"
+            - "tysm that means a lot 🥹❤️"
+            - "yoo glad you liked it! 🔥"
+            - "omg thank youuu 🙏"
             `;
         }
 
