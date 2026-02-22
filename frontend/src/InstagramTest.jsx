@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import InstaProfile from './components/InstaProfile';
+import BrandDeals from './components/BrandDeals';
 import './InstagramTest.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -624,6 +625,9 @@ function InstagramTest() {
                                 )}
                             </div>
                         </div>
+
+                        {/* ==================== BRAND DEALS SECTION ==================== */}
+                        <BrandDeals userId={userId} token={token} />
 
                         {media && (
                             <div className="media-section">

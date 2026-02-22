@@ -16,6 +16,7 @@ const {
 } = require('../model/Instaautomation');
 const CreatorPersona = require('../model/CreatorPersona');
 const aiService = require('../service/aiService');
+const brandDealService = require('../service/brandDealService');
 
 // Instagram Graph API Configuration
 const INSTAGRAM_CONFIG = {
@@ -1678,6 +1679,122 @@ router.post('/debug/test-dm-webhook', async (req, res) => {
         res.status(500).json({
             success: false,
             error: error.message
+        });
+    }
+});
+
+
+// ==================== BRAND DEAL ROUTES ====================
+
+// Route: Trigger brand deal analysis
+router.post('/brand-deals/analyze', async (req, res) => {
+    try {
+        const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+        const { userId } = req.body;
+
+        if (!token || !userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'token and userId are required'
+            });
+        }
+
+        console.log(`[BrandDeals] Analysis triggered for user: ${userId}`);
+
+        // Run analysis in background (non-blocking)
+        res.json({
+            success: true,
+            message: 'Brand deal analysis started. This may take 30-60 seconds.',
+            status: 'analyzing'
+        });
+
+        // Execute analysis after response is sent
+        brandDealService.analyzeCreatorForBrands(userId, token)
+            .then(result => console.log('[BrandDeals] Analysis result:', JSON.stringify(result)))
+            .catch(err => console.error('[BrandDeals] Analysis failed:', err.message));
+
+    } catch (error) {
+        console.error('[BrandDeals] Analyze endpoint error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to start brand deal analysis',
+            message: error.message
+        });
+    }
+});
+
+// Route: Get brand deal analysis results
+router.get('/brand-deals/results', async (req, res) => {
+    try {
+        const { userId } = req.query;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'userId query param required'
+            });
+        }
+
+        const BrandDeal = require('../model/BrandDeal');
+        const dealRecord = await BrandDeal.findOne({ userId })
+            .sort({ analysisTimestamp: -1 });
+
+        if (!dealRecord) {
+            return res.json({
+                success: true,
+                hasResults: false,
+                message: 'No brand deal analysis found. Click "Find Brand Deals" to start.'
+            });
+        }
+
+        res.json({
+            success: true,
+            hasResults: true,
+            status: dealRecord.status,
+            analysisTimestamp: dealRecord.analysisTimestamp,
+            creatorProfile: dealRecord.creatorProfile,
+            brandDeals: dealRecord.brandDeals,
+            outreachTemplates: dealRecord.outreachTemplates || [],
+            error: dealRecord.error
+        });
+
+    } catch (error) {
+        console.error('[BrandDeals] Results endpoint error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch brand deal results',
+            message: error.message
+        });
+    }
+});
+
+// Route: Generate outreach email template (Phase 2)
+router.post('/brand-deals/outreach', async (req, res) => {
+    try {
+        const { userId, brandName, brandCategory } = req.body;
+
+        if (!userId || !brandName) {
+            return res.status(400).json({
+                success: false,
+                error: 'userId and brandName are required'
+            });
+        }
+
+        console.log(`[BrandDeals] Generating outreach template for ${brandName}`);
+        const result = await brandDealService.generateOutreachTemplate(userId, brandName, brandCategory);
+
+        res.json({
+            success: result.success,
+            data: result.success ? result.template : null,
+            error: result.error || null
+        });
+
+    } catch (error) {
+        console.error('[BrandDeals] Outreach endpoint error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to generate outreach template',
+            message: error.message
         });
     }
 });
