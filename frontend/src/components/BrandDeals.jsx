@@ -1,428 +1,420 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import '../styles/BrandDeals.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+const PIPELINE_STAGES = ['all', 'discovered', 'saved', 'pitched', 'waiting', 'won', 'lost'];
+const STAGE_LABELS = { all: 'All Deals', discovered: 'Discovered', saved: 'Saved', pitched: 'Pitched', waiting: 'Waiting', won: 'Won', lost: 'Lost' };
+const STAGE_ICONS = { discovered: '🔍', saved: '⭐', pitched: '📨', waiting: '⏳', won: '🏆', lost: '❌' };
+const STAGE_COLORS = { discovered: '#64b5f6', saved: '#ffd54f', pitched: '#ba68c8', waiting: '#ffab40', won: '#69f0ae', lost: '#ef5350' };
+
 function BrandDeals({ userId, token }) {
     const [loading, setLoading] = useState(false);
     const [results, setResults] = useState(null);
-    const [status, setStatus] = useState('');
-    const [pollingInterval, setPollingInterval] = useState(null);
-    const [outreachLoading, setOutreachLoading] = useState(null);
-    const [outreachTemplate, setOutreachTemplate] = useState(null);
+    const [statusMsg, setStatusMsg] = useState('');
+    const [pollingId, setPollingId] = useState(null);
+    const [activeTab, setActiveTab] = useState('all');
+    const [expandedDeal, setExpandedDeal] = useState(null);
+    const [pitchLoading, setPitchLoading] = useState(null);
+    const [toast, setToast] = useState('');
     const [filterCategory, setFilterCategory] = useState('all');
     const [sortBy, setSortBy] = useState('matchScore');
 
     useEffect(() => {
-        if (userId) {
-            fetchResults();
-        }
-        return () => {
-            if (pollingInterval) clearInterval(pollingInterval);
-        };
+        if (userId) fetchResults();
+        return () => { if (pollingId) clearInterval(pollingId); };
     }, [userId]);
 
-    const fetchResults = async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/instagram/brand-deals/results?userId=${userId}`);
-            const data = await response.json();
+    const showToast = (msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(''), 3000);
+    };
 
+    const fetchResults = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/instagram/brand-deals/results?userId=${userId}`);
+            const data = await res.json();
             if (data.success && data.hasResults) {
                 setResults(data);
                 if (data.status === 'completed' || data.status === 'failed') {
-                    if (pollingInterval) {
-                        clearInterval(pollingInterval);
-                        setPollingInterval(null);
-                    }
+                    if (pollingId) { clearInterval(pollingId); setPollingId(null); }
                     setLoading(false);
                 }
             }
-        } catch (err) {
-            console.error('Failed to fetch brand deal results:', err);
-        }
-    };
+        } catch (err) { console.error('Fetch results error:', err); }
+    }, [userId, pollingId]);
 
     const startAnalysis = async () => {
+        setLoading(true);
+        setStatusMsg('Analyzing your content and searching for brand deals...');
+        setExpandedDeal(null);
         try {
-            setLoading(true);
-            setStatus('Analyzing your content and searching for brand deals...');
-            setOutreachTemplate(null);
-
-            const response = await fetch(`${API_BASE_URL}/api/instagram/brand-deals/analyze?token=${token}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const res = await fetch(`${API_BASE_URL}/api/instagram/brand-deals/analyze?token=${token}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId })
             });
-
-            const data = await response.json();
-
+            const data = await res.json();
             if (data.success) {
-                setStatus('Analysis in progress — searching the web for brand deals...');
-
-                // Poll for results every 5 seconds
+                setStatusMsg('Searching the web for brand partnership programs...');
                 const interval = setInterval(fetchResults, 5000);
-                setPollingInterval(interval);
-
-                // Also check after 10s for quick results
+                setPollingId(interval);
                 setTimeout(fetchResults, 10000);
-            } else {
-                setStatus(`Error: ${data.error}`);
-                setLoading(false);
-            }
-        } catch (err) {
-            setStatus(`Error: ${err.message}`);
-            setLoading(false);
-        }
+            } else { setStatusMsg(`Error: ${data.error}`); setLoading(false); }
+        } catch (err) { setStatusMsg(`Error: ${err.message}`); setLoading(false); }
     };
 
-    const generateOutreach = async (brandName, brandCategory) => {
+    const generatePitch = async (brandName, category) => {
+        setPitchLoading(brandName);
         try {
-            setOutreachLoading(brandName);
-            setOutreachTemplate(null);
-
-            const response = await fetch(`${API_BASE_URL}/api/instagram/brand-deals/outreach`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, brandName, brandCategory })
+            const res = await fetch(`${API_BASE_URL}/api/instagram/brand-deals/generate-pitch`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, brandName, brandCategory: category })
             });
-
-            const data = await response.json();
-
+            const data = await res.json();
             if (data.success) {
-                setOutreachTemplate({ brandName, ...data.data });
-            } else {
-                setStatus(`Outreach error: ${data.error}`);
-            }
-        } catch (err) {
-            setStatus(`Error: ${err.message}`);
-        } finally {
-            setOutreachLoading(null);
-        }
+                await fetchResults(); // Refresh to get stored pitch
+                showToast(`Pitch generated for ${brandName}!`);
+            } else { showToast(`Error: ${data.error}`); }
+        } catch (err) { showToast(`Error: ${err.message}`); }
+        finally { setPitchLoading(null); }
     };
 
-    const getMatchColor = (score) => {
-        if (score >= 80) return '#00e676';
-        if (score >= 60) return '#ffab40';
-        if (score >= 40) return '#ffd740';
-        return '#ff5252';
+    const updateDealStatus = async (brandName, newStatus) => {
+        try {
+            await fetch(`${API_BASE_URL}/api/instagram/brand-deals/update-status`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, brandName, dealStatus: newStatus })
+            });
+            await fetchResults();
+            showToast(`${brandName} → ${STAGE_LABELS[newStatus] || newStatus}`);
+        } catch (err) { showToast(`Error: ${err.message}`); }
     };
 
-    const getMatchLabel = (score) => {
-        if (score >= 80) return 'Excellent';
-        if (score >= 60) return 'Good';
-        if (score >= 40) return 'Fair';
-        return 'Low';
+    const saveNotes = async (brandName, notes) => {
+        try {
+            await fetch(`${API_BASE_URL}/api/instagram/brand-deals/save-notes`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, brandName, notes })
+            });
+            showToast('Notes saved');
+        } catch (err) { showToast(`Error: ${err.message}`); }
     };
 
-    const getCollabIcon = (type) => {
-        const t = (type || '').toLowerCase();
-        if (t.includes('sponsor')) return '💰';
-        if (t.includes('affiliate')) return '🔗';
-        if (t.includes('ambassador')) return '🏆';
-        if (t.includes('gift')) return '🎁';
-        if (t.includes('paid')) return '💵';
-        return '🤝';
+    const copyPitch = (deal) => {
+        const text = `Subject: ${deal.pitch?.subject || ''}\n\n${deal.pitch?.body || ''}`;
+        navigator.clipboard.writeText(text);
+        showToast('Pitch copied to clipboard!');
     };
 
-    const timeAgo = (timestamp) => {
-        if (!timestamp) return '';
-        const now = new Date();
-        const then = new Date(timestamp);
-        const diff = Math.floor((now - then) / 1000);
-
-        if (diff < 60) return 'just now';
-        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-        return `${Math.floor(diff / 86400)}d ago`;
+    const getMatchColor = (s) => s >= 80 ? '#69f0ae' : s >= 60 ? '#ffab40' : s >= 40 ? '#ffd740' : '#ef5350';
+    const getMatchLabel = (s) => s >= 80 ? 'Excellent' : s >= 60 ? 'Good' : s >= 40 ? 'Fair' : 'Low';
+    const getCollabIcon = (t) => {
+        const l = (t || '').toLowerCase();
+        return l.includes('sponsor') ? '💰' : l.includes('affiliate') ? '🔗' : l.includes('ambassador') ? '🏆' : l.includes('gift') ? '🎁' : l.includes('paid') ? '💵' : '🤝';
+    };
+    const timeAgo = (ts) => {
+        if (!ts) return '';
+        const d = Math.floor((Date.now() - new Date(ts)) / 1000);
+        return d < 60 ? 'just now' : d < 3600 ? `${Math.floor(d / 60)}m ago` : d < 86400 ? `${Math.floor(d / 3600)}h ago` : `${Math.floor(d / 86400)}d ago`;
     };
 
-    // Filter and sort brand deals
-    const getFilteredDeals = () => {
+    // Filter deals by tab and category
+    const getVisibleDeals = () => {
         if (!results?.brandDeals) return [];
         let deals = [...results.brandDeals];
-
-        if (filterCategory !== 'all') {
-            deals = deals.filter(d => (d.category || '').toLowerCase().includes(filterCategory.toLowerCase()));
-        }
-
-        deals.sort((a, b) => {
-            if (sortBy === 'matchScore') return (b.matchScore || 0) - (a.matchScore || 0);
-            if (sortBy === 'name') return (a.brandName || '').localeCompare(b.brandName || '');
-            return 0;
-        });
-
+        if (activeTab !== 'all') deals = deals.filter(d => (d.dealStatus || 'discovered') === activeTab);
+        if (filterCategory !== 'all') deals = deals.filter(d => (d.category || '').toLowerCase().includes(filterCategory.toLowerCase()));
+        deals.sort((a, b) => sortBy === 'matchScore' ? (b.matchScore || 0) - (a.matchScore || 0) : (a.brandName || '').localeCompare(b.brandName || ''));
         return deals;
     };
 
-    // Get unique categories for filter
-    const getCategories = () => {
-        if (!results?.brandDeals) return [];
-        const cats = new Set(results.brandDeals.map(d => d.category).filter(Boolean));
-        return [...cats];
+    const getCounts = () => {
+        if (!results?.brandDeals) return {};
+        const counts = { all: results.brandDeals.length };
+        PIPELINE_STAGES.slice(1).forEach(s => counts[s] = 0);
+        results.brandDeals.forEach(d => { const s = d.dealStatus || 'discovered'; counts[s] = (counts[s] || 0) + 1; });
+        return counts;
     };
 
-    const filteredDeals = getFilteredDeals();
+    const getCategories = () => {
+        if (!results?.brandDeals) return [];
+        return [...new Set(results.brandDeals.map(d => d.category).filter(Boolean))];
+    };
+
+    const deals = getVisibleDeals();
+    const counts = getCounts();
     const categories = getCategories();
+    const kit = results?.mediaKit;
 
     return (
-        <div className="brand-deals-section">
-            <div className="brand-deals-header">
-                <div className="brand-deals-title-row">
-                    <h2>🤝 Brand Collaboration Finder</h2>
-                    <div className="brand-deals-actions">
-                        <button
-                            onClick={startAnalysis}
-                            disabled={loading}
-                            className="btn-find-deals"
-                        >
-                            {loading ? (
-                                <>
-                                    <span className="spinner"></span>
-                                    Analyzing...
-                                </>
-                            ) : results?.hasResults ? (
-                                '🔄 Refresh Deals'
-                            ) : (
-                                '🔍 Find Brand Deals'
-                            )}
-                        </button>
+        <div className="bd-section">
+            {/* Header */}
+            <div className="bd-header">
+                <div className="bd-header-top">
+                    <div>
+                        <h2 className="bd-title">🤝 Brand Deal Finder</h2>
+                        <p className="bd-subtitle">AI discovers real brand deals · You manage the pipeline · All inside your platform</p>
                     </div>
+                    <button onClick={startAnalysis} disabled={loading} className="bd-btn-primary">
+                        {loading ? <><span className="bd-spinner"></span>Analyzing...</> : results?.hasResults ? '🔄 Refresh Deals' : '🔍 Find Brand Deals'}
+                    </button>
                 </div>
-                <p className="brand-deals-desc">
-                    AI-powered real-time brand deal discovery based on your content, engagement, and niche.
-                </p>
             </div>
 
-            {/* Status Message */}
-            {loading && status && (
-                <div className="brand-deals-loading">
-                    <div className="loading-pulse"></div>
-                    <p>{status}</p>
-                    <p className="loading-sub">This usually takes 30-60 seconds. Searching the web for real brand programs...</p>
+            {/* Loading */}
+            {loading && statusMsg && (
+                <div className="bd-loading">
+                    <div className="bd-loading-pulse"></div>
+                    <p className="bd-loading-text">{statusMsg}</p>
+                    <p className="bd-loading-sub">Usually takes 30-60 seconds. Searching the web for real brand programs...</p>
                 </div>
             )}
 
-            {/* Error State */}
+            {/* Error */}
             {results?.status === 'failed' && (
-                <div className="brand-deals-error">
+                <div className="bd-error">
                     <p>❌ Analysis failed: {results.error}</p>
-                    <button onClick={startAnalysis} className="btn-retry">Retry</button>
+                    <button onClick={startAnalysis} className="bd-btn-retry">Retry</button>
                 </div>
             )}
 
-            {/* Creator Profile Summary */}
-            {results?.creatorProfile && results.status === 'completed' && (
-                <div className="creator-profile-summary">
-                    <div className="profile-summary-header">
-                        <h3>📊 Your Creator Profile</h3>
-                        <span className="analysis-time">
-                            Analyzed {timeAgo(results.analysisTimestamp)}
-                        </span>
+            {/* Media Kit + Profile Summary */}
+            {kit && results?.status === 'completed' && (
+                <div className="bd-media-kit">
+                    <div className="bd-kit-header">
+                        <h3>📊 Your Media Kit</h3>
+                        <span className="bd-kit-time">Updated {timeAgo(kit.generatedAt)}</span>
                     </div>
-                    <div className="profile-stats-grid">
-                        <div className="profile-stat-card">
-                            <span className="stat-value">{results.creatorProfile.followerCount?.toLocaleString()}</span>
-                            <span className="stat-label">Followers</span>
+                    <div className="bd-kit-grid">
+                        <div className="bd-kit-stat">
+                            <span className="bd-kit-number">{kit.followers?.toLocaleString()}</span>
+                            <span className="bd-kit-label">Followers</span>
                         </div>
-                        <div className="profile-stat-card">
-                            <span className="stat-value">{results.creatorProfile.engagementRate}%</span>
-                            <span className="stat-label">Engagement</span>
+                        <div className="bd-kit-stat">
+                            <span className="bd-kit-number">{kit.engagementRate}%</span>
+                            <span className="bd-kit-label">Engagement</span>
                         </div>
-                        <div className="profile-stat-card niche-card">
-                            <span className="stat-value niche-value">{results.creatorProfile.niche}</span>
-                            <span className="stat-label">Primary Niche</span>
+                        <div className="bd-kit-stat">
+                            <span className="bd-kit-number bd-niche">{kit.niche}</span>
+                            <span className="bd-kit-label">Niche</span>
                         </div>
-                        <div className="profile-stat-card">
-                            <span className="stat-value tier-value">{results.creatorProfile.followerTier}</span>
-                            <span className="stat-label">Creator Tier</span>
+                        <div className="bd-kit-stat">
+                            <span className="bd-kit-number bd-tier">{kit.followerTier}</span>
+                            <span className="bd-kit-label">Tier</span>
+                        </div>
+                        <div className="bd-kit-stat">
+                            <span className="bd-kit-number">{kit.avgLikes}</span>
+                            <span className="bd-kit-label">Avg Likes</span>
+                        </div>
+                        <div className="bd-kit-stat">
+                            <span className="bd-kit-number">{kit.avgComments}</span>
+                            <span className="bd-kit-label">Avg Comments</span>
                         </div>
                     </div>
-                    {results.creatorProfile.subNiches?.length > 0 && (
-                        <div className="sub-niches">
-                            {results.creatorProfile.subNiches.map((niche, i) => (
-                                <span key={i} className="niche-tag">{niche}</span>
-                            ))}
+                    {kit.topHashtags?.length > 0 && (
+                        <div className="bd-kit-tags">
+                            {kit.topHashtags.map((h, i) => <span key={i} className="bd-tag">{h}</span>)}
                         </div>
                     )}
                 </div>
             )}
 
-            {/* Filters & Sort */}
+            {/* Pipeline Tabs */}
             {results?.brandDeals?.length > 0 && (
-                <div className="brand-deals-filters">
-                    <div className="filter-group">
-                        <label>Category:</label>
-                        <select
-                            value={filterCategory}
-                            onChange={(e) => setFilterCategory(e.target.value)}
-                            className="filter-select"
-                        >
-                            <option value="all">All Categories</option>
-                            {categories.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                        </select>
+                <div className="bd-pipeline">
+                    <div className="bd-tabs">
+                        {PIPELINE_STAGES.map(stage => (
+                            <button
+                                key={stage}
+                                className={`bd-tab ${activeTab === stage ? 'active' : ''}`}
+                                onClick={() => setActiveTab(stage)}
+                                style={activeTab === stage && stage !== 'all' ? { borderColor: STAGE_COLORS[stage] } : {}}
+                            >
+                                {stage !== 'all' && <span className="bd-tab-icon">{STAGE_ICONS[stage]}</span>}
+                                {STAGE_LABELS[stage]}
+                                {counts[stage] > 0 && <span className="bd-tab-count" style={stage !== 'all' ? { background: `${STAGE_COLORS[stage]}25`, color: STAGE_COLORS[stage] } : {}}>{counts[stage]}</span>}
+                            </button>
+                        ))}
                     </div>
-                    <div className="filter-group">
-                        <label>Sort by:</label>
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                            className="filter-select"
-                        >
+
+                    {/* Filters */}
+                    <div className="bd-filters">
+                        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="bd-select">
+                            <option value="all">All Categories</option>
+                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="bd-select">
                             <option value="matchScore">Match Score</option>
                             <option value="name">Brand Name</option>
                         </select>
+                        <span className="bd-count">{deals.length} deal{deals.length !== 1 ? 's' : ''}</span>
                     </div>
-                    <span className="deals-count">{filteredDeals.length} deals found</span>
                 </div>
             )}
 
-            {/* Brand Deal Cards */}
-            {filteredDeals.length > 0 && (
-                <div className="brand-deals-grid">
-                    {filteredDeals.map((deal, index) => (
-                        <div
-                            key={index}
-                            className="brand-deal-card"
-                            style={{ animationDelay: `${index * 0.08}s` }}
-                        >
-                            <div className="deal-card-header">
-                                <div className="deal-brand-info">
-                                    <span className="deal-collab-icon">{getCollabIcon(deal.collaborationType)}</span>
-                                    <div>
-                                        <h4 className="deal-brand-name">{deal.brandName}</h4>
-                                        {deal.programName && (
-                                            <span className="deal-program">{deal.programName}</span>
-                                        )}
+            {/* Deal Cards */}
+            {deals.length > 0 && (
+                <div className="bd-deals-list">
+                    {deals.map((deal, i) => {
+                        const isExpanded = expandedDeal === deal.brandName;
+                        const hasPitch = deal.pitch?.body;
+                        const status = deal.dealStatus || 'discovered';
+
+                        return (
+                            <div key={i} className={`bd-card ${isExpanded ? 'expanded' : ''}`} style={{ animationDelay: `${i * 0.06}s` }}>
+                                {/* Card Main */}
+                                <div className="bd-card-main" onClick={() => setExpandedDeal(isExpanded ? null : deal.brandName)}>
+                                    <div className="bd-card-left">
+                                        <span className="bd-card-icon">{getCollabIcon(deal.collaborationType)}</span>
+                                        <div className="bd-card-info">
+                                            <div className="bd-card-top-row">
+                                                <h4 className="bd-brand-name">{deal.brandName}</h4>
+                                                <span className="bd-status-badge" style={{ background: `${STAGE_COLORS[status]}20`, color: STAGE_COLORS[status], borderColor: `${STAGE_COLORS[status]}40` }}>
+                                                    {STAGE_ICONS[status]} {STAGE_LABELS[status]}
+                                                </span>
+                                            </div>
+                                            {deal.programName && <span className="bd-program">{deal.programName}</span>}
+                                            <div className="bd-card-tags">
+                                                <span className="bd-cat-tag">{deal.category}</span>
+                                                <span className="bd-collab-tag">{deal.collaborationType}</span>
+                                                {deal.estimatedBudget && <span className="bd-budget-tag">💸 {deal.estimatedBudget}</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bd-card-right">
+                                        <div className="bd-match" style={{ borderColor: `${getMatchColor(deal.matchScore)}40` }}>
+                                            <span className="bd-match-num" style={{ color: getMatchColor(deal.matchScore) }}>{deal.matchScore}%</span>
+                                            <span className="bd-match-label" style={{ color: getMatchColor(deal.matchScore) }}>{getMatchLabel(deal.matchScore)}</span>
+                                        </div>
+                                        <span className="bd-expand-icon">{isExpanded ? '▲' : '▼'}</span>
                                     </div>
                                 </div>
-                                <div
-                                    className="deal-match-score"
-                                    style={{
-                                        background: `linear-gradient(135deg, ${getMatchColor(deal.matchScore)}20, ${getMatchColor(deal.matchScore)}10)`,
-                                        borderColor: `${getMatchColor(deal.matchScore)}40`
-                                    }}
-                                >
-                                    <span
-                                        className="match-number"
-                                        style={{ color: getMatchColor(deal.matchScore) }}
-                                    >
-                                        {deal.matchScore}%
-                                    </span>
-                                    <span className="match-label" style={{ color: getMatchColor(deal.matchScore) }}>
-                                        {getMatchLabel(deal.matchScore)}
-                                    </span>
-                                </div>
-                            </div>
 
-                            <div className="deal-card-body">
-                                <div className="deal-meta">
-                                    <span className="deal-category-tag">{deal.category}</span>
-                                    <span className="deal-collab-type">{deal.collaborationType}</span>
-                                </div>
+                                {/* Expanded Detail Panel */}
+                                {isExpanded && (
+                                    <div className="bd-detail">
+                                        {/* Info Grid */}
+                                        <div className="bd-detail-grid">
+                                            {deal.description && (
+                                                <div className="bd-detail-item">
+                                                    <span className="bd-detail-icon">📝</span>
+                                                    <div><strong>About</strong><p>{deal.description}</p></div>
+                                                </div>
+                                            )}
+                                            {deal.whyItMatches && (
+                                                <div className="bd-detail-item highlight">
+                                                    <span className="bd-detail-icon">✨</span>
+                                                    <div><strong>Why You Match</strong><p>{deal.whyItMatches}</p></div>
+                                                </div>
+                                            )}
+                                            {deal.requirements && (
+                                                <div className="bd-detail-item">
+                                                    <span className="bd-detail-icon">📋</span>
+                                                    <div><strong>Requirements</strong><p>{deal.requirements}</p></div>
+                                                </div>
+                                            )}
+                                            {deal.contactEmail && (
+                                                <div className="bd-detail-item">
+                                                    <span className="bd-detail-icon">📧</span>
+                                                    <div><strong>Contact Email</strong><p className="bd-email">{deal.contactEmail}</p></div>
+                                                </div>
+                                            )}
+                                        </div>
 
-                                {deal.description && (
-                                    <p className="deal-description">{deal.description}</p>
-                                )}
+                                        {/* Pitch Section */}
+                                        <div className="bd-pitch-section">
+                                            <div className="bd-pitch-header">
+                                                <h5>✉️ Your Pitch</h5>
+                                                {!hasPitch ? (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); generatePitch(deal.brandName, deal.category); }}
+                                                        disabled={pitchLoading === deal.brandName}
+                                                        className="bd-btn-pitch"
+                                                    >
+                                                        {pitchLoading === deal.brandName ? <><span className="bd-spinner-sm"></span>Generating...</> : '🤖 Generate AI Pitch'}
+                                                    </button>
+                                                ) : (
+                                                    <button onClick={(e) => { e.stopPropagation(); copyPitch(deal); }} className="bd-btn-copy">
+                                                        📋 Copy Pitch
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {hasPitch && (
+                                                <div className="bd-pitch-content">
+                                                    <div className="bd-pitch-subject"><strong>Subject:</strong> {deal.pitch.subject}</div>
+                                                    <div className="bd-pitch-body">{deal.pitch.body}</div>
+                                                </div>
+                                            )}
+                                            {!hasPitch && <p className="bd-pitch-empty">Click "Generate AI Pitch" to create a personalized outreach email for this brand.</p>}
+                                        </div>
 
-                                {deal.estimatedBudget && (
-                                    <div className="deal-budget">
-                                        <span className="budget-icon">💸</span>
-                                        <span>{deal.estimatedBudget}</span>
+                                        {/* Notes */}
+                                        <div className="bd-notes-section">
+                                            <h5>📝 Your Notes</h5>
+                                            <textarea
+                                                className="bd-notes-input"
+                                                placeholder="Add personal notes about this deal..."
+                                                defaultValue={deal.notes || ''}
+                                                onBlur={(e) => saveNotes(deal.brandName, e.target.value)}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        </div>
+
+                                        {/* Action Buttons */}
+                                        <div className="bd-actions">
+                                            {status === 'discovered' && (
+                                                <>
+                                                    <button onClick={(e) => { e.stopPropagation(); updateDealStatus(deal.brandName, 'saved'); }} className="bd-btn-action save">⭐ Save Deal</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); updateDealStatus(deal.brandName, 'skipped'); }} className="bd-btn-action skip">Skip</button>
+                                                </>
+                                            )}
+                                            {status === 'saved' && (
+                                                <>
+                                                    <button onClick={(e) => { e.stopPropagation(); updateDealStatus(deal.brandName, 'pitched'); }} className="bd-btn-action pitched">📨 Mark as Pitched</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); updateDealStatus(deal.brandName, 'discovered'); }} className="bd-btn-action back">← Back to Discovered</button>
+                                                </>
+                                            )}
+                                            {status === 'pitched' && (
+                                                <>
+                                                    <button onClick={(e) => { e.stopPropagation(); updateDealStatus(deal.brandName, 'waiting'); }} className="bd-btn-action waiting">⏳ Waiting for Response</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); updateDealStatus(deal.brandName, 'saved'); }} className="bd-btn-action back">← Back to Saved</button>
+                                                </>
+                                            )}
+                                            {status === 'waiting' && (
+                                                <>
+                                                    <button onClick={(e) => { e.stopPropagation(); updateDealStatus(deal.brandName, 'won'); }} className="bd-btn-action won">🏆 Deal Won!</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); updateDealStatus(deal.brandName, 'lost'); }} className="bd-btn-action lost">❌ Deal Lost</button>
+                                                </>
+                                            )}
+                                            {(status === 'won' || status === 'lost' || status === 'skipped') && (
+                                                <button onClick={(e) => { e.stopPropagation(); updateDealStatus(deal.brandName, 'discovered'); }} className="bd-btn-action back">↩ Move to Discovered</button>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
-
-                                {deal.whyItMatches && (
-                                    <div className="deal-match-reason">
-                                        <span className="match-icon">✨</span>
-                                        <span>{deal.whyItMatches}</span>
-                                    </div>
-                                )}
-
-                                {deal.requirements && (
-                                    <div className="deal-requirements">
-                                        <span className="req-icon">📋</span>
-                                        <span>{deal.requirements}</span>
-                                    </div>
-                                )}
                             </div>
-
-                            <div className="deal-card-footer">
-                                {deal.applyUrl && (
-                                    <a
-                                        href={deal.applyUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="btn-apply"
-                                    >
-                                        Apply Now →
-                                    </a>
-                                )}
-                                <button
-                                    onClick={() => generateOutreach(deal.brandName, deal.category)}
-                                    disabled={outreachLoading === deal.brandName}
-                                    className="btn-outreach"
-                                >
-                                    {outreachLoading === deal.brandName ? 'Generating...' : '✉️ Generate Pitch'}
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
-            {/* No Results State */}
+            {/* Empty States */}
             {!loading && results?.hasResults === false && (
-                <div className="brand-deals-empty">
-                    <div className="empty-icon">🔍</div>
-                    <p>No brand deals analyzed yet.</p>
-                    <p className="empty-sub">Click "Find Brand Deals" to discover collaboration opportunities tailored to your profile.</p>
+                <div className="bd-empty">
+                    <div className="bd-empty-icon">🔍</div>
+                    <p>No brand deals found yet.</p>
+                    <p className="bd-empty-sub">Click "Find Brand Deals" to discover collaboration opportunities matched to your profile.</p>
+                </div>
+            )}
+            {!loading && results?.hasResults && deals.length === 0 && activeTab !== 'all' && (
+                <div className="bd-empty">
+                    <p>No deals in "{STAGE_LABELS[activeTab]}" stage.</p>
+                    <p className="bd-empty-sub">Move deals through the pipeline by expanding a deal and using the action buttons.</p>
                 </div>
             )}
 
-            {/* Outreach Template Modal */}
-            {outreachTemplate && (
-                <div className="outreach-modal-overlay" onClick={() => setOutreachTemplate(null)}>
-                    <div className="outreach-modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="outreach-modal-header">
-                            <h3>✉️ Outreach Email for {outreachTemplate.brandName}</h3>
-                            <button onClick={() => setOutreachTemplate(null)} className="btn-close-modal">✕</button>
-                        </div>
-                        <div className="outreach-modal-body">
-                            <div className="outreach-field">
-                                <label>Subject Line:</label>
-                                <div className="outreach-content subject">{outreachTemplate.subject}</div>
-                            </div>
-                            <div className="outreach-field">
-                                <label>Email Body:</label>
-                                <div className="outreach-content body">{outreachTemplate.body}</div>
-                            </div>
-                        </div>
-                        <div className="outreach-modal-footer">
-                            <button
-                                onClick={() => {
-                                    navigator.clipboard.writeText(
-                                        `Subject: ${outreachTemplate.subject}\n\n${outreachTemplate.body}`
-                                    );
-                                    setStatus('Email copied to clipboard!');
-                                    setTimeout(() => setStatus(''), 3000);
-                                }}
-                                className="btn-copy-email"
-                            >
-                                📋 Copy to Clipboard
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Status Toast */}
-            {!loading && status && (
-                <div className="brand-deals-toast">
-                    {status}
-                </div>
-            )}
+            {/* Toast */}
+            {toast && <div className="bd-toast">{toast}</div>}
         </div>
     );
 }

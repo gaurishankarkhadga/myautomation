@@ -5,13 +5,13 @@ const axios = require('axios');
 // Initialize Gemini with Google Search Grounding
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Model WITH Google Search Grounding enabled — this allows real-time web search
+// Model WITH Google Search Grounding — real-time web search
 const searchModel = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
     tools: [{ googleSearch: {} }]
 });
 
-// Standard model for non-search tasks (outreach templates etc.)
+// Standard model for non-search tasks
 const standardModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 // Instagram Graph API base URL
@@ -52,7 +52,7 @@ function extractHashtags(caption) {
 async function collectCreatorData(userId, accessToken) {
     console.log(`[BrandDeals] Collecting creator data for user: ${userId}`);
 
-    // Step 1: Fetch profile info
+    // Fetch profile info
     const profileRes = await axios.get(`${GRAPH_BASE}/${userId}`, {
         params: {
             fields: 'id,username,name,biography,followers_count,media_count,profile_picture_url',
@@ -63,10 +63,10 @@ async function collectCreatorData(userId, accessToken) {
     const profile = profileRes.data;
     console.log(`[BrandDeals] Profile: @${profile.username} | ${profile.followers_count} followers`);
 
-    // Step 2: Fetch recent media with engagement metrics
+    // Fetch recent media with engagement metrics
     const mediaRes = await axios.get(`${GRAPH_BASE}/${userId}/media`, {
         params: {
-            fields: 'id,caption,media_type,timestamp,like_count,comments_count,permalink',
+            fields: 'id,caption,media_type,timestamp,like_count,comments_count,permalink,media_url,thumbnail_url',
             limit: 25,
             access_token: accessToken
         }
@@ -75,7 +75,7 @@ async function collectCreatorData(userId, accessToken) {
     const posts = mediaRes.data.data || [];
     console.log(`[BrandDeals] Fetched ${posts.length} recent posts`);
 
-    // Step 3: Calculate engagement metrics
+    // Calculate engagement metrics
     let totalLikes = 0;
     let totalComments = 0;
     let images = 0, videos = 0, carousels = 0, reels = 0;
@@ -113,6 +113,19 @@ async function collectCreatorData(userId, accessToken) {
         .slice(0, 15)
         .map(([tag]) => tag);
 
+    // Get top performing posts (for showcase)
+    const topPosts = [...posts]
+        .sort((a, b) => ((b.like_count || 0) + (b.comments_count || 0)) - ((a.like_count || 0) + (a.comments_count || 0)))
+        .slice(0, 6)
+        .map(p => ({
+            id: p.id,
+            caption: (p.caption || '').substring(0, 100),
+            likes: p.like_count || 0,
+            comments: p.comments_count || 0,
+            type: p.media_type,
+            permalink: p.permalink
+        }));
+
     const creatorData = {
         username: profile.username,
         name: profile.name,
@@ -125,12 +138,11 @@ async function collectCreatorData(userId, accessToken) {
         contentTypes: { images, videos, carousels, reels },
         topHashtags,
         followerTier: getFollowerTier(profile.followers_count),
-        captions: allCaptions.slice(0, 15).join('\n---\n') // For niche analysis
+        captions: allCaptions.slice(0, 15).join('\n---\n'),
+        topPosts
     };
 
-    console.log(`[BrandDeals] Engagement rate: ${engagementRate}% | Tier: ${creatorData.followerTier}`);
-    console.log(`[BrandDeals] Top hashtags: ${topHashtags.slice(0, 5).join(', ')}`);
-
+    console.log(`[BrandDeals] Engagement: ${engagementRate}% | Tier: ${creatorData.followerTier}`);
     return creatorData;
 }
 
@@ -141,7 +153,7 @@ async function analyzeCreatorForBrands(userId, accessToken) {
     console.log(`\n[BrandDeals] ========== Starting Brand Deal Analysis ==========`);
     console.log(`[BrandDeals] User: ${userId}`);
 
-    // Create initial record with 'analyzing' status
+    // Create initial record
     let brandDealRecord = await BrandDeal.findOneAndUpdate(
         { userId },
         {
@@ -155,10 +167,10 @@ async function analyzeCreatorForBrands(userId, accessToken) {
     );
 
     try {
-        // Step 1: Collect creator data from Instagram
+        // Step 1: Collect creator data
         const creatorData = await collectCreatorData(userId, accessToken);
 
-        // Step 2: Use Gemini to detect niche from captions
+        // Step 2: Detect niche
         console.log('[BrandDeals] Detecting niche via AI...');
         const nichePrompt = `
         Analyze these Instagram post captions and hashtags. Determine the creator's primary niche and sub-niches.
@@ -166,9 +178,7 @@ async function analyzeCreatorForBrands(userId, accessToken) {
         CAPTIONS:
         ${creatorData.captions.substring(0, 3000)}
 
-        TOP HASHTAGS:
-        ${creatorData.topHashtags.join(', ')}
-
+        TOP HASHTAGS: ${creatorData.topHashtags.join(', ')}
         BIO: ${creatorData.bio}
 
         Return ONLY a JSON object:
@@ -176,89 +186,82 @@ async function analyzeCreatorForBrands(userId, accessToken) {
             "primaryNiche": "the main niche (e.g., fitness, fashion, tech, food, beauty, travel, gaming, lifestyle, education, comedy)",
             "subNiches": ["sub-niche1", "sub-niche2"],
             "contentThemes": ["theme1", "theme2", "theme3"],
-            "audienceType": "description of likely audience (e.g., 'Young women 18-25 interested in sustainable fashion')"
+            "audienceType": "description of likely audience"
         }
-
         No markdown. Only raw JSON.
         `;
 
         const nicheResult = await standardModel.generateContent(nichePrompt);
-        const nicheText = nicheResult.response.text();
         let nicheData;
         try {
-            nicheData = JSON.parse(cleanJsonString(nicheText));
+            nicheData = JSON.parse(cleanJsonString(nicheResult.response.text()));
         } catch (e) {
             console.error('[BrandDeals] Niche parse error, using fallback');
-            nicheData = {
-                primaryNiche: 'lifestyle',
-                subNiches: ['general'],
-                contentThemes: ['content creation'],
-                audienceType: 'general audience'
-            };
+            nicheData = { primaryNiche: 'lifestyle', subNiches: ['general'], contentThemes: ['content creation'], audienceType: 'general audience' };
         }
 
-        console.log(`[BrandDeals] Niche detected: ${nicheData.primaryNiche} | Sub: ${nicheData.subNiches.join(', ')}`);
+        console.log(`[BrandDeals] Niche: ${nicheData.primaryNiche} | Sub: ${nicheData.subNiches.join(', ')}`);
 
-        // Step 3: Use Gemini with Google Search Grounding for REAL-TIME brand discovery
-        console.log('[BrandDeals] Searching for real brand deals with Google Search Grounding...');
+        // Step 3: Search for real brand deals WITH contact info
+        console.log('[BrandDeals] Searching for brand deals with Google Search Grounding...');
 
         const brandSearchPrompt = `
-        I'm a ${nicheData.primaryNiche} content creator on Instagram with these stats:
+        I'm a ${nicheData.primaryNiche} content creator on Instagram:
         - Username: @${creatorData.username}
         - Followers: ${creatorData.followerCount.toLocaleString()} (${creatorData.followerTier} tier)
         - Engagement rate: ${creatorData.engagementRate}%
-        - Average likes: ${creatorData.avgLikes} per post
-        - Average comments: ${creatorData.avgComments} per post
+        - Average likes: ${creatorData.avgLikes} | Average comments: ${creatorData.avgComments}
         - Content focus: ${nicheData.subNiches.join(', ')}
-        - Content themes: ${nicheData.contentThemes.join(', ')}
-        - Audience type: ${nicheData.audienceType}
+        - Audience: ${nicheData.audienceType}
         - Bio: ${creatorData.bio}
 
-        Search the internet and find me REAL, CURRENT brand collaboration and influencer partnership programs that I can apply to RIGHT NOW.
+        Search the internet and find me REAL, CURRENT brand collaboration and influencer partnership programs.
 
-        I need you to find:
-        1. Brands that have active influencer/creator programs in the ${nicheData.primaryNiche} space
+        Find:
+        1. Brands with active influencer/creator programs in ${nicheData.primaryNiche}
         2. Affiliate programs I can join
-        3. Brand ambassador programs currently accepting applications
-        4. Creator marketplaces or platforms where brands are looking for ${nicheData.primaryNiche} creators
-        5. Any brands specifically looking for ${creatorData.followerTier}-tier influencers
+        3. Brand ambassador programs accepting applications
+        4. Creator marketplaces looking for ${nicheData.primaryNiche} creators
+        5. Brands specifically looking for ${creatorData.followerTier}-tier influencers
 
-        For EACH brand deal found, provide:
+        For EACH brand deal, provide:
         - Brand name
-        - Program name (e.g., "Nike Creator Collective", "Sephora Squad")
-        - Category (e.g., sportswear, beauty, tech)
+        - Program name
+        - Category
         - Type of collaboration (sponsored post, affiliate, ambassador, product gifting, paid partnership)
-        - Estimated budget/compensation range (if available)
-        - Real URL to apply or learn more
+        - Estimated budget/compensation range
+        - Description of the program
         - Why this creator is a good match
-        - Requirements to join (if known)
-        - A brief description of the program
+        - Requirements to join
+        - Contact email (search for their influencer/partnerships/marketing email if available)
+        - Program URL (the brand's influencer program page)
+        - Match score 0-100
 
-        Return the results as a JSON array with this EXACT format:
+        Return as a JSON array:
         [
             {
                 "brandName": "Brand Name",
                 "programName": "Program Name",
                 "category": "category",
                 "collaborationType": "type",
-                "estimatedBudget": "$X - $Y per post or commission-based",
-                "applyUrl": "https://real-url-to-apply.com",
-                "description": "Brief description of the program",
-                "whyItMatches": "Why this creator is a good fit",
-                "requirements": "Minimum followers, engagement, etc.",
+                "estimatedBudget": "$X - $Y per post",
+                "description": "Brief description",
+                "whyItMatches": "Why this creator fits",
+                "requirements": "Requirements",
+                "contactEmail": "partnerships@brand.com or empty string if not found",
+                "programUrl": "https://brand.com/influencer-program",
                 "matchScore": 85
             }
         ]
 
-        IMPORTANT RULES:
-        - Find at least 8-12 brand deals
-        - ALL URLs must be REAL, working URLs you found through search
-        - matchScore should be 0-100 based on how well this creator fits (consider followers, niche, engagement)
-        - Sort by matchScore descending (best matches first)
-        - Include a mix of big brands AND smaller/niche brands
-        - Include both paid programs AND affiliate/commission programs
-        - Do NOT make up URLs — only include URLs you actually found
-        - Return ONLY the JSON array, no markdown, no explanation
+        RULES:
+        - Find 8-12 brand deals
+        - Include REAL contact emails when findable (influencer@, partnerships@, creators@, collab@)
+        - programUrl should be the brand's own influencer/creator program page
+        - Sort by matchScore descending
+        - Mix of big brands AND niche brands
+        - Mix of paid AND affiliate/commission programs
+        - Return ONLY the JSON array, no markdown
         `;
 
         const brandResult = await searchModel.generateContent(brandSearchPrompt);
@@ -268,10 +271,7 @@ async function analyzeCreatorForBrands(userId, accessToken) {
         try {
             brandDeals = JSON.parse(cleanJsonString(brandText));
         } catch (e) {
-            console.error('[BrandDeals] Brand deals parse error:', e.message);
-            console.error('[BrandDeals] Raw response (first 500):', brandText.substring(0, 500));
-
-            // Try to extract JSON array from the response
+            console.error('[BrandDeals] Parse error:', e.message);
             const jsonMatch = brandText.match(/\[[\s\S]*\]/);
             if (jsonMatch) {
                 try {
@@ -284,29 +284,47 @@ async function analyzeCreatorForBrands(userId, accessToken) {
             }
         }
 
-        // Validate and clean the results
+        // Clean and format results — each deal starts as 'discovered'
         brandDeals = (Array.isArray(brandDeals) ? brandDeals : []).map(deal => ({
             brandName: deal.brandName || 'Unknown Brand',
             programName: deal.programName || '',
             category: deal.category || nicheData.primaryNiche,
             collaborationType: deal.collaborationType || 'partnership',
             estimatedBudget: deal.estimatedBudget || 'Varies',
-            applyUrl: deal.applyUrl || '',
             description: deal.description || '',
             whyItMatches: deal.whyItMatches || '',
             requirements: deal.requirements || 'Check program page',
-            matchScore: Math.min(100, Math.max(0, parseInt(deal.matchScore) || 50))
+            contactEmail: deal.contactEmail || '',
+            programUrl: deal.programUrl || '',
+            matchScore: Math.min(100, Math.max(0, parseInt(deal.matchScore) || 50)),
+            dealStatus: 'discovered',
+            pitch: { subject: '', body: '', generatedAt: null },
+            notes: '',
+            priority: ''
         }));
 
-        // Sort by match score
         brandDeals.sort((a, b) => b.matchScore - a.matchScore);
 
         console.log(`[BrandDeals] Found ${brandDeals.length} brand deals`);
         brandDeals.slice(0, 3).forEach(d => {
-            console.log(`[BrandDeals]   - ${d.brandName} (${d.matchScore}% match) | ${d.collaborationType}`);
+            console.log(`[BrandDeals]   - ${d.brandName} (${d.matchScore}%) | Contact: ${d.contactEmail || 'N/A'}`);
         });
 
-        // Step 4: Save results to MongoDB
+        // Build auto media kit
+        const mediaKit = {
+            followers: creatorData.followerCount,
+            engagementRate: creatorData.engagementRate,
+            avgLikes: creatorData.avgLikes,
+            avgComments: creatorData.avgComments,
+            niche: nicheData.primaryNiche,
+            followerTier: creatorData.followerTier,
+            topHashtags: creatorData.topHashtags.slice(0, 8),
+            bio: creatorData.bio,
+            contentMix: creatorData.contentTypes,
+            generatedAt: new Date()
+        };
+
+        // Save results
         brandDealRecord = await BrandDeal.findOneAndUpdate(
             { userId },
             {
@@ -327,119 +345,151 @@ async function analyzeCreatorForBrands(userId, accessToken) {
                     bio: creatorData.bio
                 },
                 brandDeals,
+                mediaKit,
                 error: null
             },
             { new: true }
         );
 
         console.log(`[BrandDeals] ========== Analysis Complete ==========\n`);
-
-        return {
-            success: true,
-            dealsFound: brandDeals.length,
-            niche: nicheData.primaryNiche,
-            engagementRate: creatorData.engagementRate,
-            followerTier: creatorData.followerTier
-        };
+        return { success: true, dealsFound: brandDeals.length, niche: nicheData.primaryNiche };
 
     } catch (error) {
         console.error(`[BrandDeals] Analysis failed:`, error.message);
-        if (error.response) {
-            console.error('[BrandDeals] API error:', JSON.stringify(error.response.data));
-        }
-
-        await BrandDeal.findOneAndUpdate(
-            { userId },
-            { status: 'failed', error: error.message },
-            { new: true }
-        );
-
+        await BrandDeal.findOneAndUpdate({ userId }, { status: 'failed', error: error.message });
         return { success: false, error: error.message };
     }
 }
 
 
-// ==================== OUTREACH TEMPLATE GENERATION (Phase 2) ====================
+// ==================== PITCH GENERATION ====================
 
-async function generateOutreachTemplate(userId, brandName, brandCategory) {
-    console.log(`[BrandDeals] Generating outreach template for ${brandName}`);
+async function generatePitch(userId, brandName, brandCategory) {
+    console.log(`[BrandDeals] Generating pitch for ${brandName}`);
 
     try {
-        const dealRecord = await BrandDeal.findOne({ userId, status: 'completed' })
-            .sort({ analysisTimestamp: -1 });
+        const dealRecord = await BrandDeal.findOne({ userId, status: 'completed' }).sort({ analysisTimestamp: -1 });
 
         if (!dealRecord || !dealRecord.creatorProfile) {
-            return { success: false, error: 'No brand deal analysis found. Run analysis first.' };
+            return { success: false, error: 'No analysis found. Run analysis first.' };
         }
 
         const profile = dealRecord.creatorProfile;
-        const deal = dealRecord.brandDeals.find(d =>
-            d.brandName.toLowerCase() === brandName.toLowerCase()
-        );
+        const deal = dealRecord.brandDeals.find(d => d.brandName.toLowerCase() === brandName.toLowerCase());
+        const kit = dealRecord.mediaKit;
 
         const prompt = `
-        Write a professional but friendly outreach email for an Instagram creator pitching a collaboration.
+        Write a professional but warm outreach pitch for an Instagram creator.
 
         CREATOR:
-        - Username: @${profile.username}
-        - Niche: ${profile.niche}
-        - Followers: ${profile.followerCount.toLocaleString()}
-        - Engagement rate: ${profile.engagementRate}%
-        - Average likes: ${profile.avgLikes} per post
+        - @${profile.username} | ${profile.niche} creator
+        - ${profile.followerCount.toLocaleString()} followers (${profile.followerTier} tier)
+        - ${profile.engagementRate}% engagement rate | Avg ${profile.avgLikes} likes
+        - Bio: ${profile.bio}
 
         BRAND: ${brandName}
-        BRAND CATEGORY: ${brandCategory || deal?.category || 'general'}
+        CATEGORY: ${brandCategory || deal?.category || 'general'}
         ${deal ? `PROGRAM: ${deal.programName || 'General partnership'}` : ''}
         ${deal ? `WHY MATCH: ${deal.whyItMatches}` : ''}
 
-        Write an email with:
-        1. A catchy, short subject line
-        2. A warm but professional intro (who you are, your niche)
-        3. Why you love their brand (be specific, not generic)
-        4. Your value proposition (stats, engagement, audience fit)
-        5. A clear call-to-action
-        6. Keep it under 200 words total
+        Write an email pitch with:
+        1. Catchy subject line
+        2. Warm intro (who you are, your niche, why you love their brand)
+        3. Value proposition (stats, engagement, audience fit)
+        4. Specific collab idea (what kind of content you'd create)
+        5. Clear call-to-action
+        6. Keep it under 200 words
+
+        Sound like a real human creator, not corporate. Be enthusiastic but professional.
 
         Return ONLY a JSON object:
-        {
-            "subject": "Email subject line",
-            "body": "Full email body text"
-        }
-
+        { "subject": "Subject line", "body": "Full email body" }
         No markdown. Only raw JSON.
         `;
 
         const result = await standardModel.generateContent(prompt);
-        const responseText = result.response.text();
-        const templateData = JSON.parse(cleanJsonString(responseText));
+        const templateData = JSON.parse(cleanJsonString(result.response.text()));
 
-        // Save to the record
-        await BrandDeal.findOneAndUpdate(
-            { userId },
-            {
-                $push: {
-                    outreachTemplates: {
-                        brandName,
-                        subject: templateData.subject,
-                        body: templateData.body,
-                        generatedAt: new Date()
+        // Store the pitch inline with the deal
+        if (deal) {
+            const dealIndex = dealRecord.brandDeals.findIndex(
+                d => d.brandName.toLowerCase() === brandName.toLowerCase()
+            );
+            if (dealIndex !== -1) {
+                await BrandDeal.findOneAndUpdate(
+                    { userId, 'brandDeals.brandName': brandName },
+                    {
+                        $set: {
+                            [`brandDeals.${dealIndex}.pitch`]: {
+                                subject: templateData.subject,
+                                body: templateData.body,
+                                generatedAt: new Date()
+                            }
+                        }
                     }
-                }
+                );
             }
-        );
+        }
 
-        console.log(`[BrandDeals] Outreach template generated for ${brandName}`);
-
-        return {
-            success: true,
-            template: {
-                subject: templateData.subject,
-                body: templateData.body
-            }
-        };
+        console.log(`[BrandDeals] Pitch generated for ${brandName}`);
+        return { success: true, pitch: { subject: templateData.subject, body: templateData.body } };
 
     } catch (error) {
-        console.error('[BrandDeals] Outreach template generation failed:', error.message);
+        console.error('[BrandDeals] Pitch generation failed:', error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+
+// ==================== DEAL STATUS MANAGEMENT ====================
+
+async function updateDealStatus(userId, brandName, newStatus) {
+    try {
+        const dealRecord = await BrandDeal.findOne({ userId, status: 'completed' }).sort({ analysisTimestamp: -1 });
+        if (!dealRecord) return { success: false, error: 'No deals found' };
+
+        const dealIndex = dealRecord.brandDeals.findIndex(
+            d => d.brandName.toLowerCase() === brandName.toLowerCase()
+        );
+        if (dealIndex === -1) return { success: false, error: 'Deal not found' };
+
+        const updateFields = {
+            [`brandDeals.${dealIndex}.dealStatus`]: newStatus,
+            [`brandDeals.${dealIndex}.statusUpdatedAt`]: new Date()
+        };
+
+        if (newStatus === 'saved') updateFields[`brandDeals.${dealIndex}.savedAt`] = new Date();
+        if (newStatus === 'pitched') updateFields[`brandDeals.${dealIndex}.pitchedAt`] = new Date();
+
+        await BrandDeal.findOneAndUpdate({ userId }, { $set: updateFields });
+
+        console.log(`[BrandDeals] Status updated: ${brandName} → ${newStatus}`);
+        return { success: true, dealStatus: newStatus };
+
+    } catch (error) {
+        console.error('[BrandDeals] Status update failed:', error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+async function saveDealNotes(userId, brandName, notes) {
+    try {
+        const dealRecord = await BrandDeal.findOne({ userId, status: 'completed' }).sort({ analysisTimestamp: -1 });
+        if (!dealRecord) return { success: false, error: 'No deals found' };
+
+        const dealIndex = dealRecord.brandDeals.findIndex(
+            d => d.brandName.toLowerCase() === brandName.toLowerCase()
+        );
+        if (dealIndex === -1) return { success: false, error: 'Deal not found' };
+
+        await BrandDeal.findOneAndUpdate(
+            { userId },
+            { $set: { [`brandDeals.${dealIndex}.notes`]: notes } }
+        );
+
+        return { success: true };
+
+    } catch (error) {
         return { success: false, error: error.message };
     }
 }
@@ -447,5 +497,7 @@ async function generateOutreachTemplate(userId, brandName, brandCategory) {
 
 module.exports = {
     analyzeCreatorForBrands,
-    generateOutreachTemplate
+    generatePitch,
+    updateDealStatus,
+    saveDealNotes
 };

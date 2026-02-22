@@ -27,31 +27,68 @@ const brandDealSchema = new mongoose.Schema({
             reels: { type: Number, default: 0 }
         },
         topHashtags: [String],
-        followerTier: { type: String }, // nano, micro, mid, macro, mega
+        followerTier: { type: String },
         bio: { type: String }
     },
 
-    // Discovered brand deals
+    // Discovered brand deals — each has its own pipeline status
     brandDeals: [{
         brandName: { type: String, required: true },
         category: { type: String },
         matchScore: { type: Number, min: 0, max: 100 },
-        collaborationType: { type: String }, // sponsored, affiliate, ambassador, gifting, etc.
+        collaborationType: { type: String },
         estimatedBudget: { type: String },
-        applyUrl: { type: String },
         description: { type: String },
         whyItMatches: { type: String },
         programName: { type: String },
-        requirements: { type: String }
+        requirements: { type: String },
+        contactEmail: { type: String, default: '' },
+        programUrl: { type: String, default: '' },
+
+        // Per-deal pipeline tracking (creator-side CRM)
+        dealStatus: {
+            type: String,
+            enum: ['discovered', 'saved', 'pitched', 'waiting', 'won', 'lost', 'skipped'],
+            default: 'discovered'
+        },
+        statusUpdatedAt: { type: Date },
+        savedAt: { type: Date },
+        pitchedAt: { type: Date },
+
+        // Stored pitch (AI-generated, editable)
+        pitch: {
+            subject: { type: String, default: '' },
+            body: { type: String, default: '' },
+            generatedAt: { type: Date }
+        },
+
+        // Creator's personal notes
+        notes: { type: String, default: '' },
+        priority: {
+            type: String,
+            enum: ['high', 'medium', 'low', ''],
+            default: ''
+        }
     }],
 
-    // AI-generated outreach templates (Phase 2)
-    outreachTemplates: [{
-        brandName: { type: String },
-        subject: { type: String },
-        body: { type: String },
-        generatedAt: { type: Date, default: Date.now }
-    }],
+    // Auto-generated media kit
+    mediaKit: {
+        followers: { type: Number },
+        engagementRate: { type: Number },
+        avgLikes: { type: Number },
+        avgComments: { type: Number },
+        niche: { type: String },
+        followerTier: { type: String },
+        topHashtags: [String],
+        bio: { type: String },
+        contentMix: {
+            images: { type: Number, default: 0 },
+            videos: { type: Number, default: 0 },
+            carousels: { type: Number, default: 0 },
+            reels: { type: Number, default: 0 }
+        },
+        generatedAt: { type: Date }
+    },
 
     error: { type: String, default: null }
 });

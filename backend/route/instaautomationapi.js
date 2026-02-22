@@ -1684,7 +1684,7 @@ router.post('/debug/test-dm-webhook', async (req, res) => {
 });
 
 
-// ==================== BRAND DEAL ROUTES ====================
+// ==================== BRAND DEAL TOOLKIT ROUTES ====================
 
 // Route: Trigger brand deal analysis
 router.post('/brand-deals/analyze', async (req, res) => {
@@ -1693,58 +1693,38 @@ router.post('/brand-deals/analyze', async (req, res) => {
         const { userId } = req.body;
 
         if (!token || !userId) {
-            return res.status(400).json({
-                success: false,
-                error: 'token and userId are required'
-            });
+            return res.status(400).json({ success: false, error: 'token and userId are required' });
         }
 
         console.log(`[BrandDeals] Analysis triggered for user: ${userId}`);
 
-        // Run analysis in background (non-blocking)
         res.json({
             success: true,
             message: 'Brand deal analysis started. This may take 30-60 seconds.',
             status: 'analyzing'
         });
 
-        // Execute analysis after response is sent
         brandDealService.analyzeCreatorForBrands(userId, token)
             .then(result => console.log('[BrandDeals] Analysis result:', JSON.stringify(result)))
             .catch(err => console.error('[BrandDeals] Analysis failed:', err.message));
 
     } catch (error) {
         console.error('[BrandDeals] Analyze endpoint error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to start brand deal analysis',
-            message: error.message
-        });
+        res.status(500).json({ success: false, error: 'Failed to start analysis', message: error.message });
     }
 });
 
-// Route: Get brand deal analysis results
+// Route: Get brand deal results (full data including mediaKit)
 router.get('/brand-deals/results', async (req, res) => {
     try {
         const { userId } = req.query;
-
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                error: 'userId query param required'
-            });
-        }
+        if (!userId) return res.status(400).json({ success: false, error: 'userId required' });
 
         const BrandDeal = require('../model/BrandDeal');
-        const dealRecord = await BrandDeal.findOne({ userId })
-            .sort({ analysisTimestamp: -1 });
+        const dealRecord = await BrandDeal.findOne({ userId }).sort({ analysisTimestamp: -1 });
 
         if (!dealRecord) {
-            return res.json({
-                success: true,
-                hasResults: false,
-                message: 'No brand deal analysis found. Click "Find Brand Deals" to start.'
-            });
+            return res.json({ success: true, hasResults: false, message: 'No analysis found yet.' });
         }
 
         res.json({
@@ -1754,48 +1734,109 @@ router.get('/brand-deals/results', async (req, res) => {
             analysisTimestamp: dealRecord.analysisTimestamp,
             creatorProfile: dealRecord.creatorProfile,
             brandDeals: dealRecord.brandDeals,
-            outreachTemplates: dealRecord.outreachTemplates || [],
+            mediaKit: dealRecord.mediaKit || null,
             error: dealRecord.error
         });
 
     } catch (error) {
-        console.error('[BrandDeals] Results endpoint error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch brand deal results',
-            message: error.message
-        });
+        console.error('[BrandDeals] Results error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Route: Generate outreach email template (Phase 2)
-router.post('/brand-deals/outreach', async (req, res) => {
+// Route: Get deals grouped by pipeline stage
+router.get('/brand-deals/pipeline', async (req, res) => {
     try {
-        const { userId, brandName, brandCategory } = req.body;
+        const { userId } = req.query;
+        if (!userId) return res.status(400).json({ success: false, error: 'userId required' });
 
-        if (!userId || !brandName) {
-            return res.status(400).json({
-                success: false,
-                error: 'userId and brandName are required'
-            });
+        const BrandDeal = require('../model/BrandDeal');
+        const dealRecord = await BrandDeal.findOne({ userId, status: 'completed' }).sort({ analysisTimestamp: -1 });
+
+        if (!dealRecord) {
+            return res.json({ success: true, pipeline: { discovered: [], saved: [], pitched: [], waiting: [], won: [], lost: [], skipped: [] } });
         }
 
-        console.log(`[BrandDeals] Generating outreach template for ${brandName}`);
-        const result = await brandDealService.generateOutreachTemplate(userId, brandName, brandCategory);
+        const pipeline = { discovered: [], saved: [], pitched: [], waiting: [], won: [], lost: [], skipped: [] };
+        for (const deal of dealRecord.brandDeals) {
+            const stage = deal.dealStatus || 'discovered';
+            if (pipeline[stage]) pipeline[stage].push(deal);
+        }
+
+        res.json({
+            success: true,
+            pipeline,
+            counts: {
+                discovered: pipeline.discovered.length,
+                saved: pipeline.saved.length,
+                pitched: pipeline.pitched.length,
+                waiting: pipeline.waiting.length,
+                won: pipeline.won.length,
+                lost: pipeline.lost.length,
+                skipped: pipeline.skipped.length
+            }
+        });
+
+    } catch (error) {
+        console.error('[BrandDeals] Pipeline error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Generate AI pitch for a specific brand
+router.post('/brand-deals/generate-pitch', async (req, res) => {
+    try {
+        const { userId, brandName, brandCategory } = req.body;
+        if (!userId || !brandName) {
+            return res.status(400).json({ success: false, error: 'userId and brandName required' });
+        }
+
+        console.log(`[BrandDeals] Generating pitch for ${brandName}`);
+        const result = await brandDealService.generatePitch(userId, brandName, brandCategory);
 
         res.json({
             success: result.success,
-            data: result.success ? result.template : null,
+            data: result.success ? result.pitch : null,
             error: result.error || null
         });
 
     } catch (error) {
-        console.error('[BrandDeals] Outreach endpoint error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to generate outreach template',
-            message: error.message
-        });
+        console.error('[BrandDeals] Pitch error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Update deal pipeline status
+router.put('/brand-deals/update-status', async (req, res) => {
+    try {
+        const { userId, brandName, dealStatus } = req.body;
+        if (!userId || !brandName || !dealStatus) {
+            return res.status(400).json({ success: false, error: 'userId, brandName, dealStatus required' });
+        }
+
+        const result = await brandDealService.updateDealStatus(userId, brandName, dealStatus);
+        res.json(result);
+
+    } catch (error) {
+        console.error('[BrandDeals] Status update error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Save notes on a deal
+router.put('/brand-deals/save-notes', async (req, res) => {
+    try {
+        const { userId, brandName, notes } = req.body;
+        if (!userId || !brandName) {
+            return res.status(400).json({ success: false, error: 'userId and brandName required' });
+        }
+
+        const result = await brandDealService.saveDealNotes(userId, brandName, notes || '');
+        res.json(result);
+
+    } catch (error) {
+        console.error('[BrandDeals] Notes error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
