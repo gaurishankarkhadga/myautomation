@@ -1684,158 +1684,211 @@ router.post('/debug/test-dm-webhook', async (req, res) => {
 });
 
 
-// ==================== BRAND DEAL TOOLKIT ROUTES ====================
+// ==================== BRAND DEAL MARKETPLACE ROUTES ====================
 
-// Route: Trigger brand deal analysis
-router.post('/brand-deals/analyze', async (req, res) => {
+const Campaign = require('../model/Campaign');
+const DealApplication = require('../model/DealApplication');
+
+// Route: List open campaigns (with filters)
+router.get('/campaigns', async (req, res) => {
+    try {
+        const { niche, compensationType, minBudget, maxBudget, status, page = 1, limit = 20 } = req.query;
+
+        const filter = { status: status || 'open' };
+        if (niche) filter.targetNiche = new RegExp(niche, 'i');
+        if (compensationType) filter.compensationType = compensationType;
+        if (minBudget) filter.budgetMax = { $gte: parseInt(minBudget) };
+        if (maxBudget) filter.budgetMin = { $lte: parseInt(maxBudget) };
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const campaigns = await Campaign.find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        const total = await Campaign.countDocuments(filter);
+
+        res.json({
+            success: true,
+            campaigns,
+            pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / parseInt(limit)) }
+        });
+
+    } catch (error) {
+        console.error('[Marketplace] List campaigns error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Get single campaign by ID
+router.get('/campaigns/:id', async (req, res) => {
+    try {
+        const campaign = await Campaign.findById(req.params.id);
+        if (!campaign) return res.status(404).json({ success: false, error: 'Campaign not found' });
+
+        // Increment views
+        await Campaign.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
+
+        res.json({ success: true, campaign });
+    } catch (error) {
+        console.error('[Marketplace] Get campaign error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Create campaign (admin)
+router.post('/campaigns', async (req, res) => {
+    try {
+        const {
+            brandName, brandLogo, brandWebsite, brandDescription,
+            title, description, deliverables, requirements, guidelines,
+            budgetMin, budgetMax, currency, compensationType,
+            targetNiche, targetSubNiches, minFollowers, maxFollowers,
+            category, tags, applicationDeadline,
+            campaignStartDate, campaignEndDate, contactEmail, status
+        } = req.body;
+
+        if (!brandName || !title || !description || !targetNiche) {
+            return res.status(400).json({ success: false, error: 'brandName, title, description, and targetNiche are required' });
+        }
+
+        const campaign = await Campaign.create({
+            brandName, brandLogo, brandWebsite, brandDescription,
+            title, description, deliverables, requirements, guidelines,
+            budgetMin: budgetMin || 0, budgetMax: budgetMax || 0,
+            currency: currency || 'USD', compensationType: compensationType || 'paid',
+            targetNiche, targetSubNiches: targetSubNiches || [],
+            minFollowers: minFollowers || 1000, maxFollowers: maxFollowers || 1000000,
+            category: category || targetNiche, tags: tags || [],
+            applicationDeadline: applicationDeadline ? new Date(applicationDeadline) : null,
+            campaignStartDate: campaignStartDate ? new Date(campaignStartDate) : null,
+            campaignEndDate: campaignEndDate ? new Date(campaignEndDate) : null,
+            contactEmail: contactEmail || '', status: status || 'open',
+            createdBy: 'admin'
+        });
+
+        console.log(`[Marketplace] Campaign created: "${title}" by ${brandName}`);
+        res.status(201).json({ success: true, campaign });
+
+    } catch (error) {
+        console.error('[Marketplace] Create campaign error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Update campaign (admin)
+router.put('/campaigns/:id', async (req, res) => {
+    try {
+        const campaign = await Campaign.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!campaign) return res.status(404).json({ success: false, error: 'Campaign not found' });
+
+        res.json({ success: true, campaign });
+    } catch (error) {
+        console.error('[Marketplace] Update campaign error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Get AI match score for a campaign
+router.get('/campaigns/:id/match-score', async (req, res) => {
     try {
         const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+        const userId = req.query.userId;
+        if (!token || !userId) return res.status(400).json({ success: false, error: 'token and userId required' });
+
+        const campaign = await Campaign.findById(req.params.id);
+        if (!campaign) return res.status(404).json({ success: false, error: 'Campaign not found' });
+
+        const creatorData = await brandDealService.collectCreatorData(userId, token);
+        const match = await brandDealService.calculateMatchScore(campaign, creatorData);
+
+        res.json({ success: true, matchScore: match.score, matchReasons: match.reasons });
+
+    } catch (error) {
+        console.error('[Marketplace] Match score error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Generate AI pitch for a campaign
+router.post('/campaigns/:id/generate-pitch', async (req, res) => {
+    try {
+        const token = req.query.token || req.body.token || req.headers.authorization?.replace('Bearer ', '');
         const { userId } = req.body;
+        if (!token || !userId) return res.status(400).json({ success: false, error: 'token and userId required' });
 
-        if (!token || !userId) {
-            return res.status(400).json({ success: false, error: 'token and userId are required' });
-        }
+        const campaign = await Campaign.findById(req.params.id);
+        if (!campaign) return res.status(404).json({ success: false, error: 'Campaign not found' });
 
-        console.log(`[BrandDeals] Analysis triggered for user: ${userId}`);
+        const creatorData = await brandDealService.collectCreatorData(userId, token);
+        const pitch = await brandDealService.generateApplicationPitch(campaign, creatorData);
 
-        res.json({
-            success: true,
-            message: 'Brand deal analysis started. This may take 30-60 seconds.',
-            status: 'analyzing'
-        });
-
-        brandDealService.analyzeCreatorForBrands(userId, token)
-            .then(result => console.log('[BrandDeals] Analysis result:', JSON.stringify(result)))
-            .catch(err => console.error('[BrandDeals] Analysis failed:', err.message));
+        res.json({ success: true, pitch });
 
     } catch (error) {
-        console.error('[BrandDeals] Analyze endpoint error:', error.message);
-        res.status(500).json({ success: false, error: 'Failed to start analysis', message: error.message });
+        console.error('[Marketplace] Pitch generation error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Route: Get brand deal results (full data including mediaKit)
-router.get('/brand-deals/results', async (req, res) => {
+// Route: Apply to a campaign (full end-to-end)
+router.post('/campaigns/:id/apply', async (req, res) => {
+    try {
+        const token = req.query.token || req.body.token || req.headers.authorization?.replace('Bearer ', '');
+        const { userId, personalNote } = req.body;
+        if (!token || !userId) return res.status(400).json({ success: false, error: 'token and userId required' });
+
+        console.log(`[Marketplace] Application: user ${userId} → campaign ${req.params.id}`);
+        const result = await brandDealService.submitApplication(req.params.id, userId, token, personalNote);
+
+        if (result.success) {
+            res.status(201).json(result);
+        } else {
+            res.status(400).json(result);
+        }
+
+    } catch (error) {
+        console.error('[Marketplace] Apply error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Get creator's applications
+router.get('/my-applications', async (req, res) => {
     try {
         const { userId } = req.query;
         if (!userId) return res.status(400).json({ success: false, error: 'userId required' });
 
-        const BrandDeal = require('../model/BrandDeal');
-        const dealRecord = await BrandDeal.findOne({ userId }).sort({ analysisTimestamp: -1 });
-
-        if (!dealRecord) {
-            return res.json({ success: true, hasResults: false, message: 'No analysis found yet.' });
-        }
+        const applications = await DealApplication.find({ creatorId: userId })
+            .sort({ appliedAt: -1 })
+            .populate('campaignId');
 
         res.json({
             success: true,
-            hasResults: true,
-            status: dealRecord.status,
-            analysisTimestamp: dealRecord.analysisTimestamp,
-            creatorProfile: dealRecord.creatorProfile,
-            brandDeals: dealRecord.brandDeals,
-            mediaKit: dealRecord.mediaKit || null,
-            error: dealRecord.error
+            applications: applications.map(app => ({
+                id: app._id,
+                campaign: app.campaignId ? {
+                    id: app.campaignId._id,
+                    brandName: app.campaignId.brandName,
+                    title: app.campaignId.title,
+                    compensationType: app.campaignId.compensationType,
+                    budgetMin: app.campaignId.budgetMin,
+                    budgetMax: app.campaignId.budgetMax,
+                    currency: app.campaignId.currency,
+                    status: app.campaignId.status
+                } : null,
+                matchScore: app.matchScore,
+                matchReasons: app.matchReasons,
+                pitch: app.pitch,
+                applicationStatus: app.applicationStatus,
+                appliedAt: app.appliedAt,
+                reviewedAt: app.reviewedAt
+            })),
+            total: applications.length
         });
 
     } catch (error) {
-        console.error('[BrandDeals] Results error:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Route: Get deals grouped by pipeline stage
-router.get('/brand-deals/pipeline', async (req, res) => {
-    try {
-        const { userId } = req.query;
-        if (!userId) return res.status(400).json({ success: false, error: 'userId required' });
-
-        const BrandDeal = require('../model/BrandDeal');
-        const dealRecord = await BrandDeal.findOne({ userId, status: 'completed' }).sort({ analysisTimestamp: -1 });
-
-        if (!dealRecord) {
-            return res.json({ success: true, pipeline: { discovered: [], saved: [], pitched: [], waiting: [], won: [], lost: [], skipped: [] } });
-        }
-
-        const pipeline = { discovered: [], saved: [], pitched: [], waiting: [], won: [], lost: [], skipped: [] };
-        for (const deal of dealRecord.brandDeals) {
-            const stage = deal.dealStatus || 'discovered';
-            if (pipeline[stage]) pipeline[stage].push(deal);
-        }
-
-        res.json({
-            success: true,
-            pipeline,
-            counts: {
-                discovered: pipeline.discovered.length,
-                saved: pipeline.saved.length,
-                pitched: pipeline.pitched.length,
-                waiting: pipeline.waiting.length,
-                won: pipeline.won.length,
-                lost: pipeline.lost.length,
-                skipped: pipeline.skipped.length
-            }
-        });
-
-    } catch (error) {
-        console.error('[BrandDeals] Pipeline error:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Route: Generate AI pitch for a specific brand
-router.post('/brand-deals/generate-pitch', async (req, res) => {
-    try {
-        const { userId, brandName, brandCategory } = req.body;
-        if (!userId || !brandName) {
-            return res.status(400).json({ success: false, error: 'userId and brandName required' });
-        }
-
-        console.log(`[BrandDeals] Generating pitch for ${brandName}`);
-        const result = await brandDealService.generatePitch(userId, brandName, brandCategory);
-
-        res.json({
-            success: result.success,
-            data: result.success ? result.pitch : null,
-            error: result.error || null
-        });
-
-    } catch (error) {
-        console.error('[BrandDeals] Pitch error:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Route: Update deal pipeline status
-router.put('/brand-deals/update-status', async (req, res) => {
-    try {
-        const { userId, brandName, dealStatus } = req.body;
-        if (!userId || !brandName || !dealStatus) {
-            return res.status(400).json({ success: false, error: 'userId, brandName, dealStatus required' });
-        }
-
-        const result = await brandDealService.updateDealStatus(userId, brandName, dealStatus);
-        res.json(result);
-
-    } catch (error) {
-        console.error('[BrandDeals] Status update error:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Route: Save notes on a deal
-router.put('/brand-deals/save-notes', async (req, res) => {
-    try {
-        const { userId, brandName, notes } = req.body;
-        if (!userId || !brandName) {
-            return res.status(400).json({ success: false, error: 'userId and brandName required' });
-        }
-
-        const result = await brandDealService.saveDealNotes(userId, brandName, notes || '');
-        res.json(result);
-
-    } catch (error) {
-        console.error('[BrandDeals] Notes error:', error.message);
+        console.error('[Marketplace] My applications error:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });
