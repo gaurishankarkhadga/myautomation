@@ -1688,6 +1688,7 @@ router.post('/debug/test-dm-webhook', async (req, res) => {
 
 const Campaign = require('../model/Campaign');
 const DealApplication = require('../model/DealApplication');
+const affiliateApiService = require('../service/affiliateApiService');
 
 // Route: List open campaigns (with filters)
 router.get('/campaigns', async (req, res) => {
@@ -1889,6 +1890,66 @@ router.get('/my-applications', async (req, res) => {
 
     } catch (error) {
         console.error('[Marketplace] My applications error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+// ==================== CJ AFFILIATE SYNC ROUTES ====================
+
+// Route: Sync deals from CJ Affiliate (specific keywords)
+router.post('/campaigns/sync-cj', async (req, res) => {
+    try {
+        const { keywords, category, limit, joinedOnly } = req.body;
+        console.log(`[CJ Sync] Manual sync triggered — keywords: ${keywords || 'none'}, category: ${category || 'none'}`);
+
+        const result = await affiliateApiService.syncCJDealsToDatabase({
+            keywords, category,
+            limit: limit || 100,
+            joinedOnly: joinedOnly || false
+        });
+
+        res.json({
+            success: true,
+            message: `Synced ${result.synced} new deals, updated ${result.skipped}, ${result.errors} errors`,
+            ...result
+        });
+    } catch (error) {
+        console.error('[CJ Sync] Error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Sync ALL niches from CJ
+router.post('/campaigns/sync-all', async (req, res) => {
+    try {
+        console.log('[CJ Sync] Full sync triggered — all niches');
+        const result = await affiliateApiService.syncAllNiches();
+
+        res.json({
+            success: true,
+            message: `Synced ${result.totalSynced} deals across ${result.niches} niches`,
+            ...result
+        });
+    } catch (error) {
+        console.error('[CJ Sync] Full sync error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Get CJ sync stats
+router.get('/campaigns/cj-stats', async (req, res) => {
+    try {
+        const cjCount = await Campaign.countDocuments({ source: 'cj' });
+        const manualCount = await Campaign.countDocuments({ source: 'manual' });
+        const impactCount = await Campaign.countDocuments({ source: 'impact' });
+        const total = await Campaign.countDocuments({});
+
+        res.json({
+            success: true,
+            stats: { total, cj: cjCount, manual: manualCount, impact: impactCount }
+        });
+    } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 });

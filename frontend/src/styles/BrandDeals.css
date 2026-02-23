@@ -844,6 +844,34 @@
     }
 }
 
+/* ---- CJ Integration: Source Badge, Sync Button, EPC ---- */
+.mp-source-badge {
+    font-size: 0.65rem; padding: 0.1rem 0.45rem; border-radius: 5px;
+    border: 1px solid; font-weight: 600; white-space: nowrap;
+}
+.mp-sync-btn {
+    background: linear-gradient(135deg, rgba(100, 181, 246, 0.2), rgba(100, 181, 246, 0.1));
+    border: 1px solid rgba(100, 181, 246, 0.25); color: #90caf9;
+    padding: 0.55rem 1rem; border-radius: 10px; cursor: pointer;
+    font-size: 0.85rem; font-weight: 600; transition: all 0.2s;
+    display: flex; align-items: center; gap: 0.4rem;
+}
+.mp-sync-btn:hover:not(:disabled) { background: rgba(100, 181, 246, 0.25); border-color: rgba(100, 181, 246, 0.4); }
+.mp-sync-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.mp-epc-tag { background: rgba(129, 199, 132, 0.12); color: #a5d6a7; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 5px; }
+.mp-rank-tag { background: rgba(255, 213, 79, 0.12); color: #ffd740; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 5px; }
+.mp-stats-mini { color: rgba(200, 230, 200, 0.4); font-size: 0.78rem; }
+.mp-program-link { color: #90caf9; text-decoration: none; font-size: 0.82rem; }
+.mp-program-link:hover { text-decoration: underline; }
+.mp-btn-join-program {
+    display: block; text-align: center; padding: 0.6rem 1rem;
+    background: linear-gradient(135deg, rgba(100, 181, 246, 0.15), rgba(100, 181, 246, 0.08));
+    border: 1px solid rgba(100, 181, 246, 0.25); border-radius: 8px;
+    color: #90caf9; font-weight: 600; font-size: 0.85rem; text-decoration: none;
+    margin-bottom: 0.8rem; transition: all 0.2s;
+}
+.mp-btn-join-program:hover { background: rgba(100, 181, 246, 0.22); border-color: rgba(100, 181, 246, 0.4); }
+
 /* ---- Responsive ---- */
 @media (max-width: 768px) {
     .mp-header {

@@ -54,6 +54,18 @@ const campaignSchema = new mongoose.Schema({
     createdBy: { type: String, default: 'admin' },
     contactEmail: { type: String, default: '' },
 
+    // Affiliate Network Source
+    source: {
+        type: String,
+        enum: ['manual', 'cj', 'impact'],
+        default: 'manual'
+    },
+    externalId: { type: String, default: '' },         // CJ advertiser-id or Impact advertiser-id
+    programUrl: { type: String, default: '' },          // Real join/apply URL
+    epc: { type: String, default: '' },                 // Earnings per click from network
+    networkRank: { type: String, default: '' },         // Rank on the network
+    relationshipStatus: { type: String, default: '' },  // joined / not joined
+
 }, { timestamps: true });
 
 campaignSchema.index({ status: 1, targetNiche: 1 });

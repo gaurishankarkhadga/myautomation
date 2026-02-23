@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import '../styles/BrandDeals.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -11,26 +11,33 @@ const STATUS_MAP = {
     withdrawn: { label: 'Withdrawn', icon: '↩', color: '#9e9e9e' }
 };
 const COMP_ICONS = { paid: '💰', product: '🎁', affiliate: '🔗', hybrid: '💎' };
+const SOURCE_CONFIG = {
+    cj: { label: 'CJ Affiliate', color: '#64b5f6', icon: '🔵' },
+    impact: { label: 'Impact', color: '#ce93d8', icon: '🟣' },
+    manual: { label: 'Manual', color: '#a5d6a7', icon: '📌' }
+};
 
 function BrandDeals({ userId, token }) {
-    // State
-    const [view, setView] = useState('marketplace');           // 'marketplace' | 'applications'
+    const [view, setView] = useState('marketplace');
     const [campaigns, setCampaigns] = useState([]);
     const [applications, setApplications] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState(null);
-    const [applyingId, setApplyingId] = useState(null);        // campaign ID being applied to
-    const [pitchData, setPitchData] = useState({});             // { campId: { subject, body } }
+    const [applyingId, setApplyingId] = useState(null);
+    const [pitchData, setPitchData] = useState({});
     const [pitchLoading, setPitchLoading] = useState(null);
-    const [matchData, setMatchData] = useState({});             // { campId: { score, reasons } }
+    const [matchData, setMatchData] = useState({});
     const [personalNotes, setPersonalNotes] = useState({});
     const [toast, setToast] = useState('');
     const [filterNiche, setFilterNiche] = useState('all');
     const [filterComp, setFilterComp] = useState('all');
+    const [filterSource, setFilterSource] = useState('all');
+    const [syncing, setSyncing] = useState(false);
+    const [syncStats, setSyncStats] = useState(null);
 
-    // Load data
     useEffect(() => {
         fetchCampaigns();
+        fetchSyncStats();
         if (userId) fetchApplications();
     }, [userId]);
 
@@ -47,7 +54,11 @@ function BrandDeals({ userId, token }) {
             if (filterComp !== 'all') params.set('compensationType', filterComp);
             const res = await fetch(`${API_BASE_URL}/api/instagram/campaigns?${params}`);
             const data = await res.json();
-            if (data.success) setCampaigns(data.campaigns || []);
+            if (data.success) {
+                let filtered = data.campaigns || [];
+                if (filterSource !== 'all') filtered = filtered.filter(c => c.source === filterSource);
+                setCampaigns(filtered);
+            }
         } catch (e) { console.error('Fetch campaigns error:', e); }
         setLoading(false);
     };
@@ -60,8 +71,36 @@ function BrandDeals({ userId, token }) {
         } catch (e) { console.error('Fetch applications error:', e); }
     };
 
-    // Re-fetch when filters change
-    useEffect(() => { fetchCampaigns(); }, [filterNiche, filterComp]);
+    const fetchSyncStats = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/instagram/campaigns/cj-stats`);
+            const data = await res.json();
+            if (data.success) setSyncStats(data.stats);
+        } catch (e) { /* ignore */ }
+    };
+
+    useEffect(() => { fetchCampaigns(); }, [filterNiche, filterComp, filterSource]);
+
+    // Sync all CJ deals
+    const syncCJDeals = async () => {
+        setSyncing(true);
+        showToast('Syncing deals from CJ Affiliate...');
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/instagram/campaigns/sync-all`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast(`✅ ${data.message}`);
+                await fetchCampaigns();
+                await fetchSyncStats();
+            } else {
+                showToast(`❌ Sync failed: ${data.error}`);
+            }
+        } catch (e) { showToast(`❌ Sync error: ${e.message}`); }
+        setSyncing(false);
+    };
 
     // Get match score for a campaign
     const getMatchScore = async (campId) => {
@@ -73,7 +112,7 @@ function BrandDeals({ userId, token }) {
         } catch (e) { console.error('Match score error:', e); }
     };
 
-    // Generate pitch for a campaign
+    // Generate pitch
     const generatePitch = async (campId) => {
         setPitchLoading(campId);
         try {
@@ -83,12 +122,8 @@ function BrandDeals({ userId, token }) {
                 body: JSON.stringify({ userId, token })
             });
             const data = await res.json();
-            if (data.success) {
-                setPitchData(prev => ({ ...prev, [campId]: data.pitch }));
-                showToast('AI pitch generated!');
-            } else {
-                showToast(`Error: ${data.error}`);
-            }
+            if (data.success) { setPitchData(prev => ({ ...prev, [campId]: data.pitch })); showToast('AI pitch generated!'); }
+            else showToast(`Error: ${data.error}`);
         } catch (e) { showToast(`Error: ${e.message}`); }
         setPitchLoading(null);
     };
@@ -107,22 +142,16 @@ function BrandDeals({ userId, token }) {
                 showToast(`Application submitted! Match score: ${data.application.matchScore}%`);
                 setExpandedId(null);
                 await fetchApplications();
-            } else {
-                showToast(`Error: ${data.error}`);
-            }
+            } else showToast(`Error: ${data.error}`);
         } catch (e) { showToast(`Error: ${e.message}`); }
         setApplyingId(null);
     };
 
-    // Check if already applied to a campaign
     const hasApplied = (campId) => applications.some(a => a.campaign?.id === campId);
-
-    // Get unique niches for filter
     const niches = [...new Set(campaigns.map(c => c.targetNiche).filter(Boolean))];
 
-    // Helpers
     const formatBudget = (c) => {
-        if (!c.budgetMin && !c.budgetMax) return 'Negotiable';
+        if (!c.budgetMin && !c.budgetMax) return c.epc || 'Commission-based';
         if (c.budgetMin && c.budgetMax) return `$${c.budgetMin.toLocaleString()} – $${c.budgetMax.toLocaleString()}`;
         if (c.budgetMax) return `Up to $${c.budgetMax.toLocaleString()}`;
         return `From $${c.budgetMin.toLocaleString()}`;
@@ -141,30 +170,33 @@ function BrandDeals({ userId, token }) {
 
     return (
         <div className="mp-section">
-            {/* ---- Header ---- */}
+            {/* Header */}
             <div className="mp-header">
                 <div className="mp-header-top">
                     <div>
                         <h2 className="mp-title">🤝 Brand Deal Marketplace</h2>
-                        <p className="mp-subtitle">Real campaigns · One-click apply with AI pitch · Track every application</p>
+                        <p className="mp-subtitle">
+                            Real deals from CJ Affiliate · AI match scoring · One-click apply
+                            {syncStats && <span className="mp-stats-mini"> — {syncStats.cj} CJ deals, {syncStats.manual} manual</span>}
+                        </p>
                     </div>
                     <div className="mp-header-actions">
-                        <button
-                            onClick={() => setView('marketplace')}
-                            className={`mp-view-btn ${view === 'marketplace' ? 'active' : ''}`}
-                        >🏪 Campaigns</button>
-                        <button
-                            onClick={() => { setView('applications'); fetchApplications(); }}
-                            className={`mp-view-btn ${view === 'applications' ? 'active' : ''}`}
-                        >📋 My Applications {applications.length > 0 && <span className="mp-badge">{applications.length}</span>}</button>
+                        <button onClick={syncCJDeals} disabled={syncing} className="mp-sync-btn">
+                            {syncing ? <><span className="mp-spinner-sm"></span> Syncing...</> : '🔄 Sync CJ Deals'}
+                        </button>
+                        <button onClick={() => setView('marketplace')} className={`mp-view-btn ${view === 'marketplace' ? 'active' : ''}`}>
+                            🏪 Campaigns
+                        </button>
+                        <button onClick={() => { setView('applications'); fetchApplications(); }} className={`mp-view-btn ${view === 'applications' ? 'active' : ''}`}>
+                            📋 My Applications {applications.length > 0 && <span className="mp-badge">{applications.length}</span>}
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* =============== MARKETPLACE VIEW =============== */}
+            {/* MARKETPLACE VIEW */}
             {view === 'marketplace' && (
                 <>
-                    {/* Filters */}
                     <div className="mp-filters">
                         <select value={filterNiche} onChange={e => setFilterNiche(e.target.value)} className="mp-select">
                             <option value="all">All Niches</option>
@@ -177,10 +209,15 @@ function BrandDeals({ userId, token }) {
                             <option value="affiliate">🔗 Affiliate</option>
                             <option value="hybrid">💎 Hybrid</option>
                         </select>
-                        <span className="mp-total">{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''} available</span>
+                        <select value={filterSource} onChange={e => setFilterSource(e.target.value)} className="mp-select">
+                            <option value="all">All Sources</option>
+                            <option value="cj">🔵 CJ Affiliate</option>
+                            <option value="impact">🟣 Impact</option>
+                            <option value="manual">📌 Manual</option>
+                        </select>
+                        <span className="mp-total">{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</span>
                     </div>
 
-                    {/* Campaign Cards */}
                     {loading ? (
                         <div className="mp-loading">
                             <div className="mp-loading-pulse"></div>
@@ -194,10 +231,10 @@ function BrandDeals({ userId, token }) {
                                 const match = matchData[camp._id];
                                 const pitch = pitchData[camp._id];
                                 const dl = daysLeft(camp.applicationDeadline);
+                                const src = SOURCE_CONFIG[camp.source] || SOURCE_CONFIG.manual;
 
                                 return (
-                                    <div key={camp._id} className={`mp-card ${isExpanded ? 'expanded' : ''}`} style={{ animationDelay: `${i * 0.05}s` }}>
-                                        {/* Card Header */}
+                                    <div key={camp._id} className={`mp-card ${isExpanded ? 'expanded' : ''}`} style={{ animationDelay: `${i * 0.04}s` }}>
                                         <div className="mp-card-header" onClick={() => {
                                             setExpandedId(isExpanded ? null : camp._id);
                                             if (!isExpanded && userId && token) getMatchScore(camp._id);
@@ -207,6 +244,9 @@ function BrandDeals({ userId, token }) {
                                                 <div className="mp-card-info">
                                                     <div className="mp-card-row1">
                                                         <h4 className="mp-brand-name">{camp.brandName}</h4>
+                                                        <span className="mp-source-badge" style={{ background: `${src.color}15`, color: src.color, borderColor: `${src.color}30` }}>
+                                                            {src.icon} {src.label}
+                                                        </span>
                                                         {applied && <span className="mp-applied-badge">✅ Applied</span>}
                                                         {dl && <span className={`mp-deadline ${dl === 'Expired' ? 'expired' : ''}`}>⏰ {dl}</span>}
                                                     </div>
@@ -215,6 +255,8 @@ function BrandDeals({ userId, token }) {
                                                         <span className="mp-niche-tag">{camp.targetNiche}</span>
                                                         <span className="mp-comp-tag">{COMP_ICONS[camp.compensationType]} {camp.compensationType}</span>
                                                         <span className="mp-budget-tag">💸 {formatBudget(camp)}</span>
+                                                        {camp.epc && <span className="mp-epc-tag">📊 EPC: {camp.epc}</span>}
+                                                        {camp.networkRank && <span className="mp-rank-tag">🏆 {camp.networkRank}</span>}
                                                         {camp.minFollowers > 0 && <span className="mp-follower-tag">👥 {(camp.minFollowers / 1000).toFixed(0)}K+</span>}
                                                     </div>
                                                 </div>
@@ -230,15 +272,13 @@ function BrandDeals({ userId, token }) {
                                             </div>
                                         </div>
 
-                                        {/* Expanded Detail */}
                                         {isExpanded && (
                                             <div className="mp-detail">
-                                                {/* Campaign Info */}
                                                 <div className="mp-info-grid">
                                                     {camp.description && (
                                                         <div className="mp-info-item">
                                                             <span className="mp-info-icon">📝</span>
-                                                            <div><strong>About This Campaign</strong><p>{camp.description}</p></div>
+                                                            <div><strong>About This Program</strong><p>{camp.description}</p></div>
                                                         </div>
                                                     )}
                                                     {camp.deliverables && (
@@ -253,10 +293,13 @@ function BrandDeals({ userId, token }) {
                                                             <div><strong>Requirements</strong><p>{camp.requirements}</p></div>
                                                         </div>
                                                     )}
-                                                    {camp.guidelines && (
+                                                    {camp.programUrl && (
                                                         <div className="mp-info-item">
-                                                            <span className="mp-info-icon">🎯</span>
-                                                            <div><strong>Content Guidelines</strong><p>{camp.guidelines}</p></div>
+                                                            <span className="mp-info-icon">🔗</span>
+                                                            <div>
+                                                                <strong>Program Link</strong>
+                                                                <p><a href={camp.programUrl} target="_blank" rel="noopener noreferrer" className="mp-program-link">{camp.programUrl.substring(0, 60)}...</a></p>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -271,27 +314,27 @@ function BrandDeals({ userId, token }) {
                                                             <div className="mp-match-bar-fill" style={{ width: `${match.score}%`, background: getMatchColor(match.score) }}></div>
                                                         </div>
                                                         <ul className="mp-match-reasons">
-                                                            {match.reasons.map((r, i) => <li key={i}>✓ {r}</li>)}
+                                                            {match.reasons.map((r, j) => <li key={j}>✓ {r}</li>)}
                                                         </ul>
                                                     </div>
                                                 )}
 
-                                                {/* Apply Section (only if not already applied) */}
+                                                {/* Apply Section */}
                                                 {!applied ? (
                                                     <div className="mp-apply-section">
-                                                        <h5>✉️ Apply to This Campaign</h5>
+                                                        <h5>✉️ Apply to This Program</h5>
 
-                                                        {/* Generate Pitch */}
+                                                        {/* Real program link for CJ deals */}
+                                                        {camp.source === 'cj' && camp.programUrl && (
+                                                            <a href={camp.programUrl} target="_blank" rel="noopener noreferrer" className="mp-btn-join-program">
+                                                                🔗 Join Program on CJ Affiliate →
+                                                            </a>
+                                                        )}
+
                                                         <div className="mp-pitch-area">
                                                             {!pitch ? (
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); generatePitch(camp._id); }}
-                                                                    disabled={pitchLoading === camp._id}
-                                                                    className="mp-btn-pitch"
-                                                                >
-                                                                    {pitchLoading === camp._id
-                                                                        ? <><span className="mp-spinner-sm"></span> Generating AI pitch...</>
-                                                                        : '🤖 Generate AI Pitch'}
+                                                                <button onClick={(e) => { e.stopPropagation(); generatePitch(camp._id); }} disabled={pitchLoading === camp._id} className="mp-btn-pitch">
+                                                                    {pitchLoading === camp._id ? <><span className="mp-spinner-sm"></span> Generating AI pitch...</> : '🤖 Generate AI Pitch'}
                                                                 </button>
                                                             ) : (
                                                                 <div className="mp-pitch-preview">
@@ -305,30 +348,22 @@ function BrandDeals({ userId, token }) {
                                                             )}
                                                         </div>
 
-                                                        {/* Personal Note */}
                                                         <textarea
                                                             className="mp-note-input"
-                                                            placeholder="Add a personal note to your application (optional)..."
+                                                            placeholder="Add a personal note (optional)..."
                                                             value={personalNotes[camp._id] || ''}
                                                             onChange={(e) => setPersonalNotes(prev => ({ ...prev, [camp._id]: e.target.value }))}
                                                             onClick={(e) => e.stopPropagation()}
                                                         />
 
-                                                        {/* Submit Button */}
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); submitApplication(camp._id); }}
-                                                            disabled={applyingId === camp._id}
-                                                            className="mp-btn-apply"
-                                                        >
-                                                            {applyingId === camp._id
-                                                                ? <><span className="mp-spinner-sm"></span> Submitting application...</>
-                                                                : '🚀 Submit Application'}
+                                                        <button onClick={(e) => { e.stopPropagation(); submitApplication(camp._id); }} disabled={applyingId === camp._id} className="mp-btn-apply">
+                                                            {applyingId === camp._id ? <><span className="mp-spinner-sm"></span> Submitting...</> : '🚀 Submit Application'}
                                                         </button>
-                                                        <p className="mp-apply-note">AI will auto-generate your pitch, media kit, and select your best posts.</p>
+                                                        <p className="mp-apply-note">AI auto-generates pitch + media kit + selects your best posts</p>
                                                     </div>
                                                 ) : (
                                                     <div className="mp-already-applied">
-                                                        <span>✅ You've already applied to this campaign</span>
+                                                        <span>✅ Already applied</span>
                                                         <button onClick={() => setView('applications')} className="mp-btn-view-app">View Application →</button>
                                                     </div>
                                                 )}
@@ -341,18 +376,20 @@ function BrandDeals({ userId, token }) {
                     ) : (
                         <div className="mp-empty">
                             <div className="mp-empty-icon">🏪</div>
-                            <p>No campaigns available right now</p>
-                            <p className="mp-empty-sub">New brand deal campaigns are added regularly. Check back soon!</p>
+                            <p>No campaigns available</p>
+                            <p className="mp-empty-sub">Click "Sync CJ Deals" to fetch real brand programs from CJ Affiliate</p>
+                            <button onClick={syncCJDeals} disabled={syncing} className="mp-btn-browse">
+                                {syncing ? 'Syncing...' : '🔄 Sync CJ Deals Now'}
+                            </button>
                         </div>
                     )}
                 </>
             )}
 
-            {/* =============== MY APPLICATIONS VIEW =============== */}
+            {/* MY APPLICATIONS VIEW */}
             {view === 'applications' && (
                 <div className="mp-applications">
                     <h3 className="mp-apps-title">Your Applications ({applications.length})</h3>
-
                     {applications.length > 0 ? (
                         <div className="mp-apps-list">
                             {applications.map((app, i) => {
@@ -367,28 +404,18 @@ function BrandDeals({ userId, token }) {
                                                 </div>
                                                 <div className="mp-app-meta">
                                                     {app.campaign && (
-                                                        <span className="mp-app-budget">
-                                                            {COMP_ICONS[app.campaign.compensationType]} ${app.campaign.budgetMin}-${app.campaign.budgetMax}
-                                                        </span>
+                                                        <span className="mp-app-budget">{COMP_ICONS[app.campaign.compensationType]} ${app.campaign.budgetMin}-${app.campaign.budgetMax}</span>
                                                     )}
                                                     <span className="mp-app-time">Applied {timeAgo(app.appliedAt)}</span>
                                                 </div>
                                             </div>
                                             <div className="mp-app-right">
-                                                <div className="mp-app-score" style={{ color: getMatchColor(app.matchScore) }}>
-                                                    {app.matchScore}% match
-                                                </div>
-                                                <span className="mp-app-status" style={{
-                                                    background: `${st.color}15`,
-                                                    color: st.color,
-                                                    borderColor: `${st.color}30`
-                                                }}>
+                                                <div className="mp-app-score" style={{ color: getMatchColor(app.matchScore) }}>{app.matchScore}% match</div>
+                                                <span className="mp-app-status" style={{ background: `${st.color}15`, color: st.color, borderColor: `${st.color}30` }}>
                                                     {st.icon} {st.label}
                                                 </span>
                                             </div>
                                         </div>
-
-                                        {/* Pitch Preview */}
                                         {app.pitch?.body && (
                                             <div className="mp-app-pitch">
                                                 <details>
@@ -400,8 +427,6 @@ function BrandDeals({ userId, token }) {
                                                 </details>
                                             </div>
                                         )}
-
-                                        {/* Match Reasons */}
                                         {app.matchReasons?.length > 0 && (
                                             <div className="mp-app-reasons">
                                                 {app.matchReasons.map((r, j) => <span key={j} className="mp-reason-tag">✓ {r}</span>)}
@@ -415,14 +440,13 @@ function BrandDeals({ userId, token }) {
                         <div className="mp-empty">
                             <div className="mp-empty-icon">📋</div>
                             <p>No applications yet</p>
-                            <p className="mp-empty-sub">Browse campaigns and apply to start building your deal pipeline.</p>
+                            <p className="mp-empty-sub">Browse campaigns and apply to start your deal pipeline</p>
                             <button onClick={() => setView('marketplace')} className="mp-btn-browse">Browse Campaigns →</button>
                         </div>
                     )}
                 </div>
             )}
 
-            {/* Toast */}
             {toast && <div className="mp-toast">{toast}</div>}
         </div>
     );
