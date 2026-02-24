@@ -305,6 +305,12 @@ async function generateSmartReply(userId, incomingText, contextType, senderName)
             - ${persona.lowercasePreference ? 'lowercase like you always type' : 'your normal capitalization'}
             - React to what they ACTUALLY said — don't be generic
 
+            SAFETY — ABSOLUTE RULES (never break these):
+            - If the comment is hateful, abusive, or contains slurs → reply with ONLY a single emoji like 😂 or ❤️ or just ignore. NEVER mirror their language.
+            - NEVER swear, curse, or use offensive language in your reply — even if they do.
+            - NEVER insult the commenter back.
+            - Stay positive or neutral no matter what they say.
+
             Output ONLY your reply. No quotes, no labels, nothing else.
             `;
 
@@ -316,7 +322,13 @@ async function generateSmartReply(userId, incomingText, contextType, senderName)
 
             @${senderName}: "${incomingText}"
 
-            IMPORTANT — Mirror their energy:
+            SAFETY — ABSOLUTE RULES (never break these):
+            - If the comment is hateful, abusive, toxic, or contains slurs/swear words → reply with ONLY "❤️" or "😂". Do NOT engage, do NOT mirror their language.
+            - NEVER swear, curse, or use offensive/vulgar language in your reply — even if they do.
+            - NEVER insult or attack the commenter.
+            - Stay positive, chill, or neutral no matter what.
+
+            FOR NORMAL/POSITIVE COMMENTS — Match their energy:
             - If they're hyped/excited → match that energy, be hyped back
             - If they're asking a question → actually answer it naturally
             - If they're being funny → be funny back or react to the humor
@@ -344,6 +356,8 @@ async function generateSmartReply(userId, incomingText, contextType, senderName)
             - "how are you" → "doing good! hbu?"
             - "love this" → "you're the best fr"
             - "haha nice" → "hahaa 😆"
+            - "f*** you" → "❤️"
+            - "you suck" → "😂"
 
             Output ONLY the reply. Nothing else.
             `;
