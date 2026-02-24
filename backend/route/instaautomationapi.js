@@ -90,6 +90,23 @@ async function replyToComment(commentId, message, accessToken) {
     }
 }
 
+async function hideComment(commentId, accessToken) {
+    try {
+        console.log('[AutoReply] Hiding comment:', commentId);
+        const response = await axios.post(
+            `${INSTAGRAM_CONFIG.graphBaseUrl}/${commentId}`,
+            { hide: true },
+            { params: { access_token: accessToken } }
+        );
+        console.log('[AutoReply] Comment hidden successfully:', commentId);
+        return { success: true };
+    } catch (error) {
+        const errorMsg = error.response?.data?.error?.message || error.message;
+        console.error('[AutoReply] Failed to hide comment:', errorMsg);
+        return { success: false, error: errorMsg };
+    }
+}
+
 async function sendDirectMessage(igUserId, recipientIGSID, message, accessToken) {
     try {
         console.log('[DM-AutoReply] Sending DM to IGSID:', recipientIGSID);
@@ -172,7 +189,7 @@ async function resolveUserIdMapping(igUserId) {
         if (commentSettings) {
             await AutoReplySetting.findOneAndUpdate(
                 { userId: igUserId },
-                { userId: igUserId, enabled: commentSettings.enabled, delaySeconds: commentSettings.delaySeconds, message: commentSettings.message },
+                { userId: igUserId, enabled: commentSettings.enabled, delaySeconds: commentSettings.delaySeconds, message: commentSettings.message, replyMode: commentSettings.replyMode || 'reply_only' },
                 { upsert: true }
             );
             console.log(`[ID-Mapping] Comment auto-reply settings synced to ${igUserId}: enabled=${commentSettings.enabled}`);
@@ -215,7 +232,7 @@ async function scheduleAutoReply(commentData, igUserId) {
 
     const settings = await AutoReplySetting.findOne({ userId: igUserId });
     console.log(`[AutoReply] Settings found for ${igUserId}:`, settings ? 'Yes' : 'No');
-    if (settings) console.log(`[AutoReply] Enabled: ${settings.enabled}, Message: "${settings.message}"`);
+    if (settings) console.log(`[AutoReply] Enabled: ${settings.enabled}, Mode: ${settings.replyMode || 'reply_only'}`);
 
     if (!settings || !settings.enabled) {
         console.log('[AutoReply] Auto-reply disabled for user:', igUserId);
@@ -243,8 +260,9 @@ async function scheduleAutoReply(commentData, igUserId) {
             commentText: commentData.text,
             commenterUsername: commentData.username,
             mediaId: commentData.mediaId,
-            replyText: settings.message,
+            replyText: '',
             status: 'failed',
+            action: 'skipped',
             error: 'No access token found',
             scheduledAt: new Date(),
             repliedAt: null
@@ -252,28 +270,68 @@ async function scheduleAutoReply(commentData, igUserId) {
         return;
     }
 
+    const replyMode = settings.replyMode || 'reply_only';
+
+    // ==================== MODE: REPLY + SMART HIDE ====================
+    if (replyMode === 'reply_and_hide') {
+        console.log('[AutoReply] Mode: reply_and_hide — analyzing comment with AI...');
+
+        try {
+            const analysis = await aiService.analyzeComment(commentData.text, commentData.username);
+
+            if (analysis.shouldHide) {
+                // Auto-hide the toxic/spam comment
+                console.log(`[AutoReply] Comment flagged as ${analysis.category}: "${analysis.reason}". Hiding...`);
+
+                const hideResult = await hideComment(commentData.commentId, tokenData.accessToken);
+
+                await AutoReplyLog.create({
+                    commentId: commentData.commentId,
+                    commentText: commentData.text,
+                    commenterUsername: commentData.username,
+                    mediaId: commentData.mediaId,
+                    replyText: `[HIDDEN: ${analysis.category} — ${analysis.reason}]`,
+                    status: hideResult.success ? 'sent' : 'failed',
+                    action: 'hidden',
+                    error: hideResult.error || null,
+                    scheduledAt: new Date(),
+                    repliedAt: new Date()
+                });
+
+                console.log(`[AutoReply] Comment ${hideResult.success ? 'hidden' : 'hide failed'}: ${commentData.commentId}`);
+                return; // Don't reply to hidden comments
+            }
+
+            // Comment is genuine — fall through to reply
+            console.log(`[AutoReply] Comment is genuine (${analysis.category}). Proceeding to reply...`);
+        } catch (err) {
+            console.error('[AutoReply] Comment analysis failed, defaulting to reply:', err.message);
+            // On error, just reply normally — safe fallback
+        }
+    }
+
+    // ==================== DETERMINE REPLY MESSAGE & DELAY ====================
     let replyMessage = settings.message;
     let delaySeconds = settings.delaySeconds || 10;
 
-    // If message is empty, use AI
-    if (!replyMessage || replyMessage.trim() === '') {
-        console.log('[AutoReply] Message field is empty. Attempting AI generation...');
+    // If mode is ai_smart OR message is empty → use AI
+    if (replyMode === 'ai_smart' || !replyMessage || replyMessage.trim() === '') {
+        console.log(`[AutoReply] Using AI for reply (mode: ${replyMode})...`);
         try {
-            // Call AI service directly (it handles fallback if persona missing)
             const aiResponse = await aiService.generateSmartReply(igUserId, commentData.text, 'comment', commentData.username);
             replyMessage = aiResponse;
 
-            // Random delay 10-50s
+            // Random delay 10-50s for human-like timing
             delaySeconds = Math.floor(Math.random() * (50 - 10 + 1)) + 10;
-            console.log(`[AutoReply] AI Reply generated: "${replyMessage}"`);
+            console.log(`[AutoReply] AI Reply: "${replyMessage}" (delay: ${delaySeconds}s)`);
         } catch (err) {
             console.error('[AutoReply] AI generation failed:', err.message);
-            replyMessage = "Thanks for the comment! 👍";
+            replyMessage = '🔥';
         }
     }
 
     const delayMs = delaySeconds * 1000;
-    console.log(`[AutoReply] Scheduling reply in ${delaySeconds}s (${delayMs}ms) for comment: ${commentData.commentId}`);
+    console.log(`[AutoReply] Scheduling reply in ${delaySeconds}s for comment: ${commentData.commentId}`);
 
     // Add log entry as 'pending'
     const logEntry = await AutoReplyLog.create({
@@ -283,6 +341,7 @@ async function scheduleAutoReply(commentData, igUserId) {
         mediaId: commentData.mediaId,
         replyText: replyMessage,
         status: 'pending',
+        action: 'replied',
         error: null,
         scheduledAt: new Date(),
         repliedAt: null
@@ -994,7 +1053,7 @@ router.delete('/messages/clear', async (req, res) => {
 router.post('/auto-reply/settings', async (req, res) => {
     try {
         const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
-        const { userId, enabled, delaySeconds, message } = req.body;
+        const { userId, enabled, delaySeconds, message, replyMode } = req.body;
 
         if (!token || !userId) {
             return res.status(400).json({
@@ -1008,13 +1067,17 @@ router.post('/auto-reply/settings', async (req, res) => {
 
         const delay = Math.min(Math.max(parseInt(delaySeconds) || 10, 5), 300);
 
+        const validModes = ['reply_only', 'reply_and_hide', 'ai_smart'];
+        const mode = validModes.includes(replyMode) ? replyMode : 'reply_only';
+
         await AutoReplySetting.findOneAndUpdate(
             { userId },
             {
                 userId,
                 enabled: Boolean(enabled),
                 delaySeconds: delay,
-                message: message ? message.trim() : ''
+                message: message ? message.trim() : '',
+                replyMode: mode
             },
             { upsert: true, new: true }
         );
@@ -1030,7 +1093,7 @@ router.post('/auto-reply/settings', async (req, res) => {
             { upsert: true }
         );
 
-        console.log(`[AutoReply] Settings saved for user ${userId}: enabled=${enabled}, delay=${delay}s`);
+        console.log(`[AutoReply] Settings saved for user ${userId}: enabled=${enabled}, delay=${delay}s, mode=${mode}`);
 
         const savedSettings = await AutoReplySetting.findOne({ userId }).lean();
 
@@ -1069,7 +1132,8 @@ router.get('/auto-reply/settings', async (req, res) => {
             data: settings || {
                 enabled: false,
                 delaySeconds: 10,
-                message: 'Thanks for your comment! 🙏'
+                message: 'Thanks for your comment! 🙏',
+                replyMode: 'reply_only'
             }
         });
 

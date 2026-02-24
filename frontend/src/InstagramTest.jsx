@@ -20,6 +20,7 @@ function InstagramTest() {
     const [autoReplyLog, setAutoReplyLog] = useState([]);
     const [autoReplySaving, setAutoReplySaving] = useState(false);
     const [autoReplyStatus, setAutoReplyStatus] = useState('');
+    const [replyMode, setReplyMode] = useState('reply_only');
 
     // DM auto-reply state
     const [dmAutoReplyEnabled, setDmAutoReplyEnabled] = useState(false);
@@ -176,6 +177,7 @@ function InstagramTest() {
                 setAutoReplyEnabled(data.data.enabled);
                 setAutoReplyDelay(data.data.delaySeconds);
                 setAutoReplyMessage(data.data.message);
+                setReplyMode(data.data.replyMode || 'reply_only');
             }
         } catch (err) {
             console.error('Failed to fetch auto-reply settings:', err);
@@ -194,7 +196,8 @@ function InstagramTest() {
                     userId,
                     enabled: autoReplyEnabled,
                     delaySeconds: autoReplyDelay,
-                    message: autoReplyMessage
+                    message: autoReplyMessage,
+                    replyMode: replyMode
                 })
             });
 
@@ -328,6 +331,12 @@ function InstagramTest() {
         return '';
     };
 
+    const getActionBadge = (action) => {
+        if (action === 'hidden') return { icon: '🛡️', text: 'Hidden', className: 'badge-hidden' };
+        if (action === 'skipped') return { icon: '⏭️', text: 'Skipped', className: 'badge-skipped' };
+        return { icon: '💬', text: 'Replied', className: 'badge-replied' };
+    };
+
     return (
         <div className="instagram-test">
             <div className="container">
@@ -406,6 +415,43 @@ function InstagramTest() {
                             </div>
 
                             <div className="auto-reply-settings">
+                                {/* Mode Selector */}
+                                <div className="mode-selector">
+                                    <label className="mode-label">Reply Mode</label>
+                                    <div className="mode-cards">
+                                        <div
+                                            className={`mode-card ${replyMode === 'reply_only' ? 'active' : ''}`}
+                                            onClick={() => setReplyMode('reply_only')}
+                                        >
+                                            <span className="mode-icon">💬</span>
+                                            <span className="mode-name">Reply Only</span>
+                                            <span className="mode-desc">Reply to all comments</span>
+                                        </div>
+                                        <div
+                                            className={`mode-card ${replyMode === 'reply_and_hide' ? 'active' : ''}`}
+                                            onClick={() => setReplyMode('reply_and_hide')}
+                                        >
+                                            <span className="mode-icon">🛡️</span>
+                                            <span className="mode-name">Smart Hide</span>
+                                            <span className="mode-desc">AI hides spam/toxic</span>
+                                        </div>
+                                        <div
+                                            className={`mode-card ${replyMode === 'ai_smart' ? 'active' : ''}`}
+                                            onClick={() => setReplyMode('ai_smart')}
+                                        >
+                                            <span className="mode-icon">🤖</span>
+                                            <span className="mode-name">AI Smart</span>
+                                            <span className="mode-desc">Persona-based replies</span>
+                                        </div>
+                                    </div>
+                                    {replyMode === 'reply_and_hide' && (
+                                        <p className="mode-info">AI automatically detects spam & toxic comments and hides them. Genuine comments get a reply.</p>
+                                    )}
+                                    {replyMode === 'ai_smart' && (
+                                        <p className="mode-info">Short, human-like replies based on your creator persona. Random 10-50s delay for natural timing.</p>
+                                    )}
+                                </div>
+
                                 <div className="setting-row">
                                     <label className="toggle-label">
                                         <span>Enable Auto-Reply</span>
@@ -486,25 +532,33 @@ function InstagramTest() {
                                     <p className="log-empty">No comment auto-replies yet. Enable auto-reply and wait for comments on your posts.</p>
                                 ) : (
                                     <div className="log-list">
-                                        {autoReplyLog.map((entry, i) => (
-                                            <div key={entry.commentId + '-' + i} className="log-entry">
-                                                <div className="log-entry-top">
-                                                    <span className="log-username">@{entry.commenterUsername}</span>
-                                                    <span className={`log-status ${getStatusBadgeClass(entry.status)}`}>
-                                                        {entry.status}
+                                        {autoReplyLog.map((entry, i) => {
+                                            const actionBadge = getActionBadge(entry.action);
+                                            return (
+                                                <div key={entry.commentId + '-' + i} className="log-entry">
+                                                    <div className="log-entry-top">
+                                                        <span className="log-username">@{entry.commenterUsername}</span>
+                                                        <div className="log-badges">
+                                                            <span className={`log-action ${actionBadge.className}`}>
+                                                                {actionBadge.icon} {actionBadge.text}
+                                                            </span>
+                                                            <span className={`log-status ${getStatusBadgeClass(entry.status)}`}>
+                                                                {entry.status}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <p className="log-comment">💬 "{entry.commentText}"</p>
+                                                    <p className="log-reply">↩️ "{entry.replyText}"</p>
+                                                    {entry.error && <p className="log-error">❌ {entry.error}</p>}
+                                                    <span className="log-time">
+                                                        {entry.repliedAt
+                                                            ? `Replied: ${new Date(entry.repliedAt).toLocaleString()}`
+                                                            : `Scheduled: ${new Date(entry.scheduledAt).toLocaleString()}`
+                                                        }
                                                     </span>
                                                 </div>
-                                                <p className="log-comment">💬 "{entry.commentText}"</p>
-                                                <p className="log-reply">↩️ "{entry.replyText}"</p>
-                                                {entry.error && <p className="log-error">❌ {entry.error}</p>}
-                                                <span className="log-time">
-                                                    {entry.repliedAt
-                                                        ? `Replied: ${new Date(entry.repliedAt).toLocaleString()}`
-                                                        : `Scheduled: ${new Date(entry.scheduledAt).toLocaleString()}`
-                                                    }
-                                                </span>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

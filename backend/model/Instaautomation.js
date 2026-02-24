@@ -13,7 +13,12 @@ const autoReplySettingSchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true, index: true },
     enabled: { type: Boolean, default: false },
     delaySeconds: { type: Number, default: 10, min: 5, max: 300 },
-    message: { type: String, default: '' }
+    message: { type: String, default: '' },
+    replyMode: {
+        type: String,
+        enum: ['reply_only', 'reply_and_hide', 'ai_smart'],
+        default: 'reply_only'
+    }
 });
 
 // ==================== AUTO-REPLY SETTINGS (DMs) ====================
@@ -33,6 +38,7 @@ const autoReplyLogSchema = new mongoose.Schema({
     replyText: { type: String },
     replyId: { type: String },
     status: { type: String, enum: ['pending', 'sent', 'failed'], default: 'pending' },
+    action: { type: String, enum: ['replied', 'hidden', 'skipped'], default: 'replied' },
     error: { type: String, default: null },
     scheduledAt: { type: Date, default: Date.now },
     repliedAt: { type: Date, default: null }

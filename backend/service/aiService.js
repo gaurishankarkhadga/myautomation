@@ -372,7 +372,58 @@ async function generateSmartReply(userId, incomingText, contextType, senderName)
 }
 
 
+// ==================== COMMENT ANALYSIS (Spam/Toxic Detection) ====================
+
+/**
+ * Analyzes a comment to determine if it's spam, toxic, or genuine.
+ * Uses Gemini for fast classification — no manual keywords needed.
+ *
+ * @param {string} commentText - The comment text to analyze
+ * @param {string} senderName - Username of the commenter
+ * @returns {Promise<{shouldHide: boolean, reason: string, category: string}>}
+ */
+async function analyzeComment(commentText, senderName) {
+    try {
+        const prompt = `Classify this Instagram comment. Return ONLY a JSON object.
+
+Comment by @${senderName}: "${commentText}"
+
+Categories:
+- "genuine" = real fan interaction, compliment, question, reaction
+- "spam" = promotion, links, "follow me", fake giveaway, bot-like repetition
+- "toxic" = hate speech, bullying, slurs, harassment, threats, extremely negative
+
+Return ONLY this JSON (no markdown, no extra text):
+{"category": "genuine", "shouldHide": false, "reason": "short reason"}
+
+Rules:
+- Default to "genuine" if unsure
+- Only mark shouldHide=true for clear spam or toxic content
+- Casual slang, abbreviations, or emoji-only comments are GENUINE
+- Simple reactions like "nice", "wow", "🔥" are GENUINE`;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text().trim();
+        const cleaned = cleanJsonString(responseText);
+        const parsed = JSON.parse(cleaned);
+
+        console.log(`[AI-Service] Comment analysis for @${senderName}: category=${parsed.category}, shouldHide=${parsed.shouldHide}`);
+
+        return {
+            shouldHide: Boolean(parsed.shouldHide),
+            reason: parsed.reason || '',
+            category: parsed.category || 'genuine'
+        };
+    } catch (error) {
+        console.error('[AI-Service] Comment analysis failed:', error.message);
+        // Default to NOT hiding on error — safe fallback
+        return { shouldHide: false, reason: 'analysis_failed', category: 'genuine' };
+    }
+}
+
+
 module.exports = {
     analyzeProfile,
-    generateSmartReply
+    generateSmartReply,
+    analyzeComment
 };
