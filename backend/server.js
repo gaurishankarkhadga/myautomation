@@ -8,7 +8,6 @@ const app = express();
 // ==================== CORS ====================
 const allowedOrigins = [...new Set([
   'http://localhost:5173',
-  'https://mydmtestingapp.netlify.app',
   process.env.FRONTEND_URL
 ].filter(Boolean))];
 
@@ -65,7 +64,7 @@ app.get('/api/health', (req, res) => {
     database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     environment: process.env.NODE_ENV || 'development',
     webhookVerifyTokenSet: !!process.env.WEBHOOK_VERIFY_TOKEN,
-    webhookUrl: `${process.env.NODE_ENV === 'production' ? 'https://myautomation-test3.onrender.com' : 'http://localhost:' + (process.env.PORT || 8000)}/api/instagram/webhook`
+    webhookUrl: `${process.env.BACKEND_URL || ('http://localhost:' + (process.env.PORT || 8000))}/api/instagram/webhook`
   });
 });
 
@@ -96,7 +95,7 @@ app.listen(PORT, () => {
   console.log(`[Server] Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`[Server] Frontend URL: ${process.env.FRONTEND_URL}`);
   console.log(`[Server] OAuth Callback: ${process.env.INSTAGRAM_REDIRECT_URI}`);
-  console.log(`[Server] Webhook URL: ${process.env.NODE_ENV === 'production' ? 'https://myautomation-test3.onrender.com' : 'http://localhost:' + PORT}/api/instagram/webhook`);
+  console.log(`[Server] Webhook URL: ${process.env.BACKEND_URL || ('http://localhost:' + PORT)}/api/instagram/webhook`);
   console.log(`[Server] Webhook Verify Token: ${process.env.WEBHOOK_VERIFY_TOKEN ? '*** (set)' : 'NOT SET'}\n`);
 });
 
