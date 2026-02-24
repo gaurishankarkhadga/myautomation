@@ -95,14 +95,30 @@ async function hideComment(commentId, accessToken) {
         console.log('[AutoReply] Hiding comment:', commentId);
         const response = await axios.post(
             `${INSTAGRAM_CONFIG.graphBaseUrl}/${commentId}`,
-            { hide: true },
-            { params: { access_token: accessToken } }
+            null,
+            { params: { hide: true, access_token: accessToken } }
         );
         console.log('[AutoReply] Comment hidden successfully:', commentId);
         return { success: true };
     } catch (error) {
         const errorMsg = error.response?.data?.error?.message || error.message;
         console.error('[AutoReply] Failed to hide comment:', errorMsg);
+        return { success: false, error: errorMsg };
+    }
+}
+
+async function deleteComment(commentId, accessToken) {
+    try {
+        console.log('[AutoReply] Deleting comment:', commentId);
+        const response = await axios.delete(
+            `${INSTAGRAM_CONFIG.graphBaseUrl}/${commentId}`,
+            { params: { access_token: accessToken } }
+        );
+        console.log('[AutoReply] Comment deleted successfully:', commentId);
+        return { success: true };
+    } catch (error) {
+        const errorMsg = error.response?.data?.error?.message || error.message;
+        console.error('[AutoReply] Failed to delete comment:', errorMsg);
         return { success: false, error: errorMsg };
     }
 }
@@ -280,26 +296,32 @@ async function scheduleAutoReply(commentData, igUserId) {
             const analysis = await aiService.analyzeComment(commentData.text, commentData.username);
 
             if (analysis.shouldHide) {
-                // Auto-hide the toxic/spam comment
-                console.log(`[AutoReply] Comment flagged as ${analysis.category}: "${analysis.reason}". Hiding...`);
+                // Try to DELETE toxic/spam comment first, fallback to hide
+                console.log(`[AutoReply] Comment flagged as ${analysis.category}: "${analysis.reason}". Removing...`);
 
-                const hideResult = await hideComment(commentData.commentId, tokenData.accessToken);
+                let result = await deleteComment(commentData.commentId, tokenData.accessToken);
+                let actionTaken = 'hidden';
+
+                if (!result.success) {
+                    console.log('[AutoReply] Delete failed, trying hide instead...');
+                    result = await hideComment(commentData.commentId, tokenData.accessToken);
+                }
 
                 await AutoReplyLog.create({
                     commentId: commentData.commentId,
                     commentText: commentData.text,
                     commenterUsername: commentData.username,
                     mediaId: commentData.mediaId,
-                    replyText: `[HIDDEN: ${analysis.category} — ${analysis.reason}]`,
-                    status: hideResult.success ? 'sent' : 'failed',
+                    replyText: `[REMOVED: ${analysis.category} — ${analysis.reason}]`,
+                    status: result.success ? 'sent' : 'failed',
                     action: 'hidden',
-                    error: hideResult.error || null,
+                    error: result.error || null,
                     scheduledAt: new Date(),
                     repliedAt: new Date()
                 });
 
-                console.log(`[AutoReply] Comment ${hideResult.success ? 'hidden' : 'hide failed'}: ${commentData.commentId}`);
-                return; // Don't reply to hidden comments
+                console.log(`[AutoReply] Comment ${result.success ? 'removed' : 'removal failed'}: ${commentData.commentId}`);
+                return; // Don't reply to removed comments
             }
 
             // Comment is genuine — fall through to reply
