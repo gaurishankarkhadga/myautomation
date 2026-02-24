@@ -300,7 +300,6 @@ async function scheduleAutoReply(commentData, igUserId) {
                 console.log(`[AutoReply] Comment flagged as ${analysis.category}: "${analysis.reason}". Removing...`);
 
                 let result = await deleteComment(commentData.commentId, tokenData.accessToken);
-                let actionTaken = 'hidden';
 
                 if (!result.success) {
                     console.log('[AutoReply] Delete failed, trying hide instead...');
