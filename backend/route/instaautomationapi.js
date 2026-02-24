@@ -25,7 +25,7 @@ const INSTAGRAM_CONFIG = {
     redirectUri: process.env.INSTAGRAM_REDIRECT_URI,
     frontendUrl: process.env.FRONTEND_URL,
     oauthBaseUrl: 'https://api.instagram.com/oauth',
-    graphBaseUrl: 'https://graph.instagram.com/v24.0',
+    graphBaseUrl: `${process.env.INSTAGRAM_GRAPH_API_BASE_URL || 'https://graph.instagram.com'}/v${process.env.INSTAGRAM_GRAPH_API_VERSION || '24.0'}`,
     scopes: ['instagram_business_basic', 'instagram_business_manage_messages', 'instagram_business_manage_comments', 'instagram_business_content_publish']
 };
 
@@ -1689,6 +1689,7 @@ router.post('/debug/test-dm-webhook', async (req, res) => {
 const Campaign = require('../model/Campaign');
 const DealApplication = require('../model/DealApplication');
 const affiliateApiService = require('../service/affiliateApiService');
+const isValidObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(id);
 
 // Route: List open campaigns (with filters)
 router.get('/campaigns', async (req, res) => {
@@ -1721,9 +1722,74 @@ router.get('/campaigns', async (req, res) => {
     }
 });
 
+// ==================== CJ AFFILIATE SYNC ROUTES (must be before :id) ====================
+
+// Route: Sync deals from CJ Affiliate (specific keywords)
+router.post('/campaigns/sync-cj', async (req, res) => {
+    try {
+        const { keywords, category, limit, joinedOnly } = req.body;
+        console.log(`[CJ Sync] Manual sync triggered — keywords: ${keywords || 'none'}, category: ${category || 'none'}`);
+
+        const result = await affiliateApiService.syncCJDealsToDatabase({
+            keywords, category,
+            limit: limit || 100,
+            joinedOnly: joinedOnly || false
+        });
+
+        res.json({
+            success: true,
+            message: `Synced ${result.synced} new deals, updated ${result.skipped}, ${result.errors} errors`,
+            ...result
+        });
+    } catch (error) {
+        console.error('[CJ Sync] Error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Sync ALL niches from CJ
+router.post('/campaigns/sync-all', async (req, res) => {
+    try {
+        console.log('[CJ Sync] Full sync triggered — all niches');
+        const result = await affiliateApiService.syncAllNiches();
+
+        res.json({
+            success: true,
+            message: `Synced ${result.totalSynced} deals across ${result.niches} niches`,
+            ...result
+        });
+    } catch (error) {
+        console.error('[CJ Sync] Full sync error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Route: Get CJ sync stats
+router.get('/campaigns/cj-stats', async (req, res) => {
+    try {
+        const cjCount = await Campaign.countDocuments({ source: 'cj' });
+        const manualCount = await Campaign.countDocuments({ source: 'manual' });
+        const impactCount = await Campaign.countDocuments({ source: 'impact' });
+        const total = await Campaign.countDocuments({});
+
+        res.json({
+            success: true,
+            stats: { total, cj: cjCount, manual: manualCount, impact: impactCount }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==================== CAMPAIGN :id ROUTES (must be after literal routes) ====================
+
 // Route: Get single campaign by ID
 router.get('/campaigns/:id', async (req, res) => {
     try {
+        if (!isValidObjectId(req.params.id)) {
+            return res.status(400).json({ success: false, error: 'Invalid campaign ID format' });
+        }
+
         const campaign = await Campaign.findById(req.params.id);
         if (!campaign) return res.status(404).json({ success: false, error: 'Campaign not found' });
 
@@ -1780,6 +1846,10 @@ router.post('/campaigns', async (req, res) => {
 // Route: Update campaign (admin)
 router.put('/campaigns/:id', async (req, res) => {
     try {
+        if (!isValidObjectId(req.params.id)) {
+            return res.status(400).json({ success: false, error: 'Invalid campaign ID format' });
+        }
+
         const campaign = await Campaign.findByIdAndUpdate(req.params.id, req.body, { new: true });
         if (!campaign) return res.status(404).json({ success: false, error: 'Campaign not found' });
 
@@ -1793,6 +1863,10 @@ router.put('/campaigns/:id', async (req, res) => {
 // Route: Get AI match score for a campaign
 router.get('/campaigns/:id/match-score', async (req, res) => {
     try {
+        if (!isValidObjectId(req.params.id)) {
+            return res.status(400).json({ success: false, error: 'Invalid campaign ID format' });
+        }
+
         const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
         const userId = req.query.userId;
         if (!token || !userId) return res.status(400).json({ success: false, error: 'token and userId required' });
@@ -1814,6 +1888,10 @@ router.get('/campaigns/:id/match-score', async (req, res) => {
 // Route: Generate AI pitch for a campaign
 router.post('/campaigns/:id/generate-pitch', async (req, res) => {
     try {
+        if (!isValidObjectId(req.params.id)) {
+            return res.status(400).json({ success: false, error: 'Invalid campaign ID format' });
+        }
+
         const token = req.query.token || req.body.token || req.headers.authorization?.replace('Bearer ', '');
         const { userId } = req.body;
         if (!token || !userId) return res.status(400).json({ success: false, error: 'token and userId required' });
@@ -1835,6 +1913,10 @@ router.post('/campaigns/:id/generate-pitch', async (req, res) => {
 // Route: Apply to a campaign (full end-to-end)
 router.post('/campaigns/:id/apply', async (req, res) => {
     try {
+        if (!isValidObjectId(req.params.id)) {
+            return res.status(400).json({ success: false, error: 'Invalid campaign ID format' });
+        }
+
         const token = req.query.token || req.body.token || req.headers.authorization?.replace('Bearer ', '');
         const { userId, personalNote } = req.body;
         if (!token || !userId) return res.status(400).json({ success: false, error: 'token and userId required' });
@@ -1895,63 +1977,5 @@ router.get('/my-applications', async (req, res) => {
 });
 
 
-// ==================== CJ AFFILIATE SYNC ROUTES ====================
-
-// Route: Sync deals from CJ Affiliate (specific keywords)
-router.post('/campaigns/sync-cj', async (req, res) => {
-    try {
-        const { keywords, category, limit, joinedOnly } = req.body;
-        console.log(`[CJ Sync] Manual sync triggered — keywords: ${keywords || 'none'}, category: ${category || 'none'}`);
-
-        const result = await affiliateApiService.syncCJDealsToDatabase({
-            keywords, category,
-            limit: limit || 100,
-            joinedOnly: joinedOnly || false
-        });
-
-        res.json({
-            success: true,
-            message: `Synced ${result.synced} new deals, updated ${result.skipped}, ${result.errors} errors`,
-            ...result
-        });
-    } catch (error) {
-        console.error('[CJ Sync] Error:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Route: Sync ALL niches from CJ
-router.post('/campaigns/sync-all', async (req, res) => {
-    try {
-        console.log('[CJ Sync] Full sync triggered — all niches');
-        const result = await affiliateApiService.syncAllNiches();
-
-        res.json({
-            success: true,
-            message: `Synced ${result.totalSynced} deals across ${result.niches} niches`,
-            ...result
-        });
-    } catch (error) {
-        console.error('[CJ Sync] Full sync error:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Route: Get CJ sync stats
-router.get('/campaigns/cj-stats', async (req, res) => {
-    try {
-        const cjCount = await Campaign.countDocuments({ source: 'cj' });
-        const manualCount = await Campaign.countDocuments({ source: 'manual' });
-        const impactCount = await Campaign.countDocuments({ source: 'impact' });
-        const total = await Campaign.countDocuments({});
-
-        res.json({
-            success: true,
-            stats: { total, cj: cjCount, manual: manualCount, impact: impactCount }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
 
 module.exports = router;
