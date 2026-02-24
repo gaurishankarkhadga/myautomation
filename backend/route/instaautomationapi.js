@@ -1095,6 +1095,24 @@ router.post('/auto-reply/settings', async (req, res) => {
 
         console.log(`[AutoReply] Settings saved for user ${userId}: enabled=${enabled}, delay=${delay}s, mode=${mode}`);
 
+        // Sync settings to ALL other user IDs (fixes OAuth ID vs webhook ID mismatch)
+        const settingsData = {
+            enabled: Boolean(enabled),
+            delaySeconds: delay,
+            message: message ? message.trim() : '',
+            replyMode: mode
+        };
+
+        const otherSettings = await AutoReplySetting.find({ userId: { $ne: userId } });
+        for (const other of otherSettings) {
+            await AutoReplySetting.findOneAndUpdate(
+                { userId: other.userId },
+                { ...settingsData, userId: other.userId },
+                { upsert: true }
+            );
+            console.log(`[AutoReply] Settings synced to mapped ID ${other.userId}: mode=${mode}`);
+        }
+
         const savedSettings = await AutoReplySetting.findOne({ userId }).lean();
 
         res.json({
