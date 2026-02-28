@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import InstaProfile from './components/InstaProfile';
 import BrandDeals from './components/BrandDeals';
 import './InstagramTest.css';
@@ -15,6 +16,8 @@ function InstagramTest() {
     const [profile, setProfile] = useState(null);
     const [media, setMedia] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [loadingInsta, setLoadingInsta] = useState(false);
+    const [loadingYT, setLoadingYT] = useState(false);
     const [error, setError] = useState('');
 
     // Comment auto-reply state
@@ -78,7 +81,7 @@ function InstagramTest() {
 
     const handleConnect = async () => {
         try {
-            setLoading(true);
+            setLoadingInsta(true);
             setError('');
 
             const response = await fetch(`${API_BASE_URL}/api/instagram/auth`);
@@ -92,7 +95,27 @@ function InstagramTest() {
         } catch (err) {
             setError(`Connection error: ${err.message}`);
         } finally {
-            setLoading(false);
+            setLoadingInsta(false);
+        }
+    };
+
+    const handleConnectYouTube = async () => {
+        try {
+            setLoadingYT(true);
+            setError('');
+
+            const response = await fetch(`${API_BASE_URL}/api/youtube/auth`);
+            const data = await response.json();
+
+            if (data.success) {
+                window.location.href = data.authUrl;
+            } else {
+                setError(data.error || 'Failed to get auth URL');
+            }
+        } catch (err) {
+            setError(`Connection error: ${err.message}`);
+        } finally {
+            setLoadingYT(false);
         }
     };
 
@@ -354,23 +377,47 @@ function InstagramTest() {
 
                 {!token ? (
                     <div className="connect-section">
-                        <p>Connect your Instagram Professional account to test the API</p>
-                        <button
-                            onClick={handleConnect}
-                            disabled={loading}
-                            className="btn-primary"
-                        >
-                            {loading ? 'Connecting...' : 'Connect Instagram'}
-                        </button>
+                        <h1>Start Automating</h1>
+                        <p>Connect your social accounts to unlock AI-powered management</p>
+                        <div className="dual-connect-actions">
+                            <button
+                                onClick={handleConnect}
+                                disabled={loadingInsta || loadingYT}
+                                className="btn-instagram-connect"
+                            >
+                                {loadingInsta ? '...' : (
+                                    <>
+                                        <span className="btn-icon">📸</span>
+                                        Connect Instagram
+                                    </>
+                                )}
+                            </button>
+                            <button
+                                onClick={handleConnectYouTube}
+                                disabled={loadingInsta || loadingYT}
+                                className="btn-youtube-connect"
+                            >
+                                {loadingYT ? '...' : (
+                                    <>
+                                        <span className="btn-icon">📺</span>
+                                        Connect YouTube
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <div className="data-section">
                         <div className="token-info">
-                            <p><strong>Connected</strong></p>
-                            <p className="user-id">User ID: {userId}</p>
-                            <button onClick={handleDisconnect} className="btn-secondary">
-                                Disconnect
-                            </button>
+                            <div className="token-main">
+                                <p><strong>Instagram Connected</strong></p>
+                                <p className="user-id">User ID: {userId}</p>
+                            </div>
+                            <div className="token-actions">
+                                <button onClick={handleDisconnect} className="btn-secondary">
+                                    Disconnect
+                                </button>
+                            </div>
                         </div>
 
                         {/* ==================== WEBHOOK SUBSCRIPTION ==================== */}

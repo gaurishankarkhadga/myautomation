@@ -55,6 +55,9 @@ mongoose.connect(process.env.MONGODB_URI)
 const instaRoutes = require('./route/instaautomationapi');
 app.use('/api/instagram', instaRoutes);
 
+const youtubeRoutes = require('./route/youtubeapi');
+app.use('/api/youtube', youtubeRoutes);
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({

@@ -1,0 +1,871 @@
+:root {
+    --yt-red: #FF0000;
+    --yt-dark: #0f0f0f;
+    --yt-gray-hover: #272727;
+    --yt-text-main: #f1f1f1;
+    --yt-text-secondary: #aaaaaa;
+    --yt-border: rgba(255, 255, 255, 0.1);
+    --yt-glass: rgba(255, 255, 255, 0.05);
+    --yt-glass-border: rgba(255, 255, 255, 0.1);
+}
+
+.yt-dashboard {
+    min-height: 100vh;
+    background-color: var(--yt-dark);
+    color: var(--yt-text-main);
+    font-family: 'Roboto', 'Inter', sans-serif;
+    padding-bottom: 4rem;
+}
+
+.yt-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+}
+
+/* Header */
+.yt-header {
+    background: rgba(15, 15, 15, 0.8);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 1px solid var(--yt-border);
+    padding: 1rem 0;
+    margin-bottom: 2rem;
+}
+
+.yt-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.yt-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.yt-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.yt-logo h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.yt-logo-svg {
+    height: 24px;
+}
+
+/* Connect Section */
+.yt-connect-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 60vh;
+}
+
+.yt-connect-card {
+    background: var(--yt-glass);
+    border: 1px solid var(--yt-glass-border);
+    border-radius: 20px;
+    padding: 3rem;
+    text-align: center;
+    max-width: 500px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    animation: fadeIn 0.5s ease-out;
+}
+
+.yt-connect-icon {
+    margin-bottom: 1.5rem;
+}
+
+.yt-connect-logo {
+    height: 40px;
+}
+
+.yt-connect-card h2 {
+    font-size: 1.75rem;
+    margin-bottom: 1rem;
+}
+
+.yt-connect-card p {
+    color: var(--yt-text-secondary);
+    margin-bottom: 2.5rem;
+    line-height: 1.6;
+}
+
+.yt-dual-connect-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.yt-btn-connect,
+.yt-btn-instagram-connect {
+    flex: 1;
+    min-width: 200px;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+    cursor: pointer;
+    border: none;
+}
+
+.yt-btn-connect {
+    background: var(--yt-red);
+    color: white;
+}
+
+.yt-btn-connect:hover {
+    background: #cc0000;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(255, 0, 0, 0.3);
+}
+
+.yt-btn-instagram-connect {
+    background: linear-gradient(135deg, #E1306C 0%, #C13584 100%);
+    color: white;
+}
+
+.yt-btn-instagram-connect:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(225, 48, 108, 0.3);
+}
+
+.yt-btn-disconnect {
+    background: var(--yt-glass);
+    color: var(--yt-text-main);
+    border: 1px solid var(--yt-border);
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.yt-btn-disconnect:hover {
+    background: var(--yt-gray-hover);
+}
+
+/* Profile Section */
+.yt-profile-card {
+    background: var(--yt-glass);
+    border: 1px solid var(--yt-glass-border);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+.yt-profile-header {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.yt-profile-avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    border: 2px solid var(--yt-red);
+}
+
+.yt-profile-info h2 {
+    margin: 0 0 0.25rem 0;
+}
+
+.yt-profile-handle {
+    color: var(--yt-text-secondary);
+    font-size: 0.95rem;
+}
+
+.yt-profile-desc {
+    color: var(--yt-text-secondary);
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.yt-profile-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    border-top: 1px solid var(--yt-border);
+    padding-top: 1.5rem;
+}
+
+.yt-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.yt-stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.yt-stat-label {
+    font-size: 0.8rem;
+    color: var(--yt-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Auto-Reply Section */
+.yt-auto-reply-section {
+    background: var(--yt-glass);
+    border: 1px solid var(--yt-glass-border);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+.yt-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.yt-section-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.yt-status-indicator {
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.yt-status-indicator.active {
+    background: rgba(46, 213, 115, 0.1);
+    color: #2ed573;
+}
+
+.yt-status-indicator.inactive {
+    background: rgba(255, 71, 87, 0.1);
+    color: #ff4757;
+}
+
+.yt-section-note {
+    background: rgba(255, 243, 205, 0.05);
+    border-left: 4px solid #f1c40f;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+    color: #f1c40f;
+    border-radius: 4px;
+}
+
+.yt-settings-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Mode Cards */
+.yt-mode-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.yt-mode-card {
+    background: var(--yt-gray-hover);
+    border: 1px solid transparent;
+    border-radius: 12px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.yt-mode-card:hover {
+    background: #333;
+}
+
+.yt-mode-card.active {
+    border-color: var(--yt-red);
+    background: rgba(255, 0, 0, 0.05);
+}
+
+.yt-mode-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.yt-mode-name {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.yt-mode-desc {
+    font-size: 0.75rem;
+    color: var(--yt-text-secondary);
+}
+
+.yt-mode-info {
+    font-size: 0.85rem;
+    color: var(--yt-red);
+    margin-top: -0.5rem;
+    margin-bottom: 1rem;
+}
+
+.yt-setting-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.yt-setting-row label span {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--yt-text-secondary);
+}
+
+.yt-delay-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.yt-slider {
+    flex: 1;
+    height: 6px;
+    background: var(--yt-gray-hover);
+    border-radius: 5px;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.yt-slider::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: var(--yt-red);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.yt-delay-value {
+    font-weight: 700;
+    min-width: 40px;
+    text-align: right;
+}
+
+.yt-textarea {
+    width: 100%;
+    background: var(--yt-gray-hover);
+    border: 1px solid var(--yt-border);
+    border-radius: 8px;
+    color: white;
+    padding: 1rem;
+    font-family: inherit;
+    resize: none;
+}
+
+.yt-char-count {
+    font-size: 0.75rem;
+    color: var(--yt-text-secondary);
+    text-align: right;
+    display: block;
+    margin-top: 0.25rem;
+}
+
+.yt-setting-actions {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.yt-btn-save {
+    background: white;
+    color: black;
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.yt-btn-save:hover {
+    background: #e6e6e6;
+}
+
+.yt-save-status {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.yt-save-status.success {
+    color: #2ed573;
+}
+
+.yt-save-status.error {
+    color: #ff4757;
+}
+
+/* Log Section */
+.yt-log-section {
+    margin-top: 3rem;
+    border-top: 1px solid var(--yt-border);
+    padding-top: 2rem;
+}
+
+.yt-log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.yt-log-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.yt-log-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.yt-btn-small {
+    background: var(--yt-gray-hover);
+    color: var(--yt-text-main);
+    border: 1px solid var(--yt-border);
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.yt-btn-small:hover {
+    background: #333;
+}
+
+.yt-btn-danger:hover {
+    background: #ff4757;
+    color: white;
+    border-color: #ff4757;
+}
+
+.yt-log-empty {
+    text-align: center;
+    color: var(--yt-text-secondary);
+    padding: 2rem;
+    font-style: italic;
+}
+
+.yt-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.yt-log-entry {
+    background: var(--yt-gray-hover);
+    border-radius: 12px;
+    padding: 1.25rem;
+    border-left: 4px solid var(--yt-border);
+}
+
+.yt-log-top {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.yt-log-username {
+    font-weight: 700;
+}
+
+.yt-log-badges {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.yt-log-action,
+.yt-log-status {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    font-weight: 800;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+}
+
+.yt-badge-replied {
+    background: rgba(52, 152, 219, 0.1);
+    color: #3498db;
+}
+
+.yt-badge-hidden {
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+}
+
+.yt-badge-skipped {
+    background: rgba(149, 165, 166, 0.1);
+    color: #95a5a6;
+}
+
+.yt-badge-success {
+    background: rgba(46, 213, 115, 0.2);
+    color: #2ed573;
+}
+
+.yt-badge-pending {
+    background: rgba(241, 196, 15, 0.2);
+    color: #f1c40f;
+}
+
+.yt-badge-error {
+    background: rgba(255, 71, 87, 0.2);
+    color: #ff4757;
+}
+
+.yt-log-comment {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.9rem;
+    font-style: italic;
+    color: var(--yt-text-secondary);
+}
+
+.yt-log-reply {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.yt-log-error {
+    font-size: 0.8rem;
+    color: #ff4757;
+    border-top: 1px solid rgba(255, 71, 87, 0.2);
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+}
+
+.yt-log-time {
+    font-size: 0.75rem;
+    color: var(--yt-text-secondary);
+    display: block;
+    margin-top: 0.75rem;
+    text-align: right;
+}
+
+/* Videos Grid */
+.yt-videos-section {
+    margin-bottom: 3rem;
+}
+
+.yt-video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1.5rem;
+}
+
+.yt-video-card {
+    background: var(--yt-gray-hover);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s;
+    border: 2px solid transparent;
+}
+
+.yt-video-card:hover {
+    transform: translateY(-5px);
+}
+
+.yt-video-card.selected {
+    border-color: var(--yt-red);
+}
+
+.yt-video-thumb {
+    position: relative;
+    aspect-ratio: 16/9;
+}
+
+.yt-video-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.yt-video-duration {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    font-size: 0.75rem;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.yt-video-info {
+    padding: 1rem;
+}
+
+.yt-video-info h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    height: 2.8em;
+    overflow: hidden;
+    display: -webkit-box;
+    line-clamp: 2;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.yt-video-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--yt-text-secondary);
+}
+
+/* Comments List */
+.yt-comments-section {
+    background: var(--yt-dark);
+    border: 1px solid var(--yt-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.yt-comment-card {
+    border-bottom: 1px solid var(--yt-border);
+    padding: 1.25rem 0;
+}
+
+.yt-comment-card:last-child {
+    border-bottom: none;
+}
+
+.yt-comment-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.yt-comment-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+}
+
+.yt-comment-meta {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.yt-comment-author {
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.yt-comment-date {
+    font-size: 0.7rem;
+    color: var(--yt-text-secondary);
+}
+
+.yt-comment-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.yt-btn-tiny {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.25rem;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.yt-btn-tiny:hover {
+    background: var(--yt-gray-hover);
+}
+
+.yt-comment-text {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.yt-comment-footer {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--yt-text-secondary);
+}
+
+/* Reply Form */
+.yt-reply-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    background: var(--yt-gray-hover);
+    padding: 0.5rem;
+    border-radius: 8px;
+}
+
+.yt-reply-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: white;
+    padding: 0.5rem;
+    outline: none;
+}
+
+.yt-btn-reply {
+    background: var(--yt-red);
+    color: white;
+    border: none;
+    padding: 0.4rem 1rem;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* Toggle Switch */
+.yt-toggle {
+    width: 44px;
+    height: 24px;
+    background: var(--yt-gray-hover);
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.yt-toggle.on {
+    background: var(--yt-red);
+}
+
+.yt-toggle-knob {
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    transition: left 0.3s;
+}
+
+.yt-toggle.on .yt-toggle-knob {
+    left: 23px;
+}
+
+/* Misc */
+.yt-error {
+    background: rgba(255, 71, 87, 0.1);
+    color: #ff4757;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.yt-error-close {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.yt-polling-banner {
+    background: rgba(46, 213, 115, 0.1);
+    color: #2ed573;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.yt-polling-dot {
+    width: 8px;
+    height: 8px;
+    background: #2ed573;
+    border-radius: 50%;
+    animation: blink 2s infinite;
+}
+
+@keyframes blink {
+    0% {
+        opacity: 0.2;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.2;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.yt-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

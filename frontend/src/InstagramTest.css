@@ -100,12 +100,64 @@ h1 {
   color: #666;
 }
 
+.dual-connect-actions {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.btn-instagram-connect,
+.btn-youtube-connect {
+  flex: 1;
+  min-width: 250px;
+  max-width: 300px;
+  padding: 18px 30px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.btn-instagram-connect {
+  background: linear-gradient(135deg, #E1306C 0%, #C13584 100%);
+  color: white;
+}
+
+.btn-instagram-connect:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(225, 48, 108, 0.4);
+}
+
+.btn-youtube-connect {
+  background: #FF0000;
+  color: white;
+}
+
+.btn-youtube-connect:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(255, 0, 0, 0.4);
+}
+
+.btn-icon {
+  font-size: 1.4rem;
+}
+
 /* Data Section */
 .data-section {
-  background: white;
+  background: #1a1a2e;
   padding: 40px;
   border-radius: 16px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  border: 1px solid #2a2a3e;
 }
 
 .token-info {
@@ -369,7 +421,7 @@ h1 {
   gap: 8px;
 }
 
-.setting-row label > span {
+.setting-row label>span {
   font-size: 0.95rem;
   color: #b0b0c8;
   font-weight: 500;
