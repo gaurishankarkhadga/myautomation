@@ -1,9 +1,7 @@
-/* Root Container */
 #root {
   max-width: 1280px;
   margin: 0 auto;
   padding: 0;
-  text-align: center;
 }
 
 /* Home Container */
@@ -215,4 +213,39 @@
   .dashboard-content {
     padding: 1rem;
   }
+}
+
+/* Footer Styles */
+.home-footer {
+  margin-top: 4rem;
+  padding: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.footer-links {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.footer-links a {
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color 0.3s ease;
+}
+
+.footer-links a:hover {
+  color: #667eea;
+}
+
+.footer-copyright {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.8rem;
 }

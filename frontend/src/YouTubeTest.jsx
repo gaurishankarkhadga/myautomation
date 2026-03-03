@@ -748,6 +748,17 @@ function YouTubeTest() {
                     </div>
                 )}
             </div>
+
+            <footer className="home-footer">
+                <div className="footer-links">
+                    <Link to="/privacy-policy">Privacy Policy</Link>
+                    <Link to="/terms-and-conditions">Terms & Conditions</Link>
+                    <Link to="/data-deletion">Data Deletion</Link>
+                </div>
+                <div className="footer-copyright">
+                    <p>&copy; {new Date().getFullYear()} CreatorHub. All rights reserved.</p>
+                </div>
+            </footer>
         </div>
     );
 }
