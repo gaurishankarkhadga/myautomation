@@ -1,5 +1,6 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const CreatorPersona = require('../model/CreatorPersona');
+const CreatorAsset = require('../model/CreatorAsset');
 const axios = require('axios');
 
 // Initialize Gemini
@@ -436,8 +437,324 @@ Rules:
 }
 
 
+// ==================== ONLINE CREATOR RESEARCH ====================
+
+/**
+ * Researches a creator's public online presence using Gemini.
+ * Builds deep understanding of their niche, brand, content themes, and audience.
+ * Results are cached in CreatorPersona.onlineResearch.
+ *
+ * @param {string} userId - Instagram User ID
+ * @param {string} username - Instagram username for research
+ * @returns {Promise<{success: boolean, research?: object}>}
+ */
+async function researchCreatorOnline(userId, username) {
+    try {
+        // Check if we already have recent research (cache for 7 days)
+        const persona = await CreatorPersona.findOne({ userId });
+        if (persona?.onlineResearch?.researchedAt) {
+            const daysSinceResearch = (Date.now() - new Date(persona.onlineResearch.researchedAt).getTime()) / (1000 * 60 * 60 * 24);
+            if (daysSinceResearch < 7) {
+                console.log(`[AI-Service] Using cached online research for @${username} (${Math.round(daysSinceResearch)}d old)`);
+                return { success: true, research: persona.onlineResearch, cached: true };
+            }
+        }
+
+        console.log(`[AI-Service] Researching @${username} online presence...`);
+
+        const prompt = `
+        You are a social media researcher. Research this Instagram creator: @${username}
+
+        Based on what you know about this creator (from your training data), provide:
+        1. Their primary NICHE (fitness, beauty, tech, comedy, education, lifestyle, etc.)
+        2. Their BRAND VOICE — how do they talk? Formal? Slang-heavy? Gen-Z energy? Professional?
+        3. What PLATFORMS are they on? (YouTube, TikTok, Twitter, blog, podcast, etc.)
+        4. Their CONTENT THEMES — what topics do they mainly cover?
+        5. Their AUDIENCE TYPE — who follows them? (teens, professionals, moms, gamers, etc.)
+        6. How do they INTERACT with fans? (casual, warm, professional, funny, etc.)
+
+        ${persona?.communicationStyle ? `For context, their Instagram communication style has been analyzed as: "${persona.communicationStyle}"` : ''}
+        ${persona?.toneKeywords?.length ? `Their tone keywords: ${persona.toneKeywords.join(', ')}` : ''}
+
+        Return ONLY a JSON object (no markdown, no extra text):
+        {
+            "niche": "primary niche",
+            "brandVoice": "detailed description of how they communicate",
+            "knownPlatforms": ["instagram", "youtube", ...],
+            "contentThemes": ["theme1", "theme2", ...],
+            "audienceType": "who their audience is",
+            "interactionStyle": "how they talk to fans in DMs"
+        }
+
+        If you don't know much about this specific creator, make reasonable inferences based on:
+        - Their username style
+        - Their communication patterns (if provided)
+        - Common patterns for creators with similar profiles
+        Be honest but helpful. Never fabricate specific facts.
+        `;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        const cleaned = cleanJsonString(responseText);
+        const research = JSON.parse(cleaned);
+
+        // Save to CreatorPersona
+        const onlineResearch = {
+            niche: research.niche || '',
+            brandVoice: research.brandVoice || '',
+            publicLinks: [],
+            knownPlatforms: research.knownPlatforms || [],
+            contentThemes: research.contentThemes || [],
+            audienceType: research.audienceType || '',
+            rawResearch: JSON.stringify(research),
+            researchedAt: new Date()
+        };
+
+        await CreatorPersona.findOneAndUpdate(
+            { userId },
+            { onlineResearch },
+            { upsert: true }
+        );
+
+        console.log(`[AI-Service] Online research complete for @${username}: niche=${research.niche}`);
+        return { success: true, research: onlineResearch, cached: false };
+
+    } catch (error) {
+        console.error('[AI-Service] Online research failed:', error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+
+// ==================== INTENT-BASED ASSET MATCHING ====================
+
+/**
+ * Matches a user's DM message to the creator's assets using AI intent detection.
+ * Returns assets sorted by relevance, or default assets for generic messages.
+ *
+ * @param {string} incomingText - The user's DM message
+ * @param {Array} creatorAssets - Array of active CreatorAsset documents
+ * @returns {Promise<{matchedAssets: Array, isGenericMessage: boolean}>}
+ */
+async function matchCreatorAssets(incomingText, creatorAssets) {
+    try {
+        if (!creatorAssets || creatorAssets.length === 0) {
+            return { matchedAssets: [], isGenericMessage: true };
+        }
+
+        // Build asset catalog for AI
+        const assetCatalog = creatorAssets.map((a, i) => ({
+            index: i,
+            id: a._id.toString(),
+            type: a.type,
+            title: a.title,
+            description: a.description,
+            tags: a.tags,
+            price: a.price,
+            isDefault: a.isDefault
+        }));
+
+        const prompt = `
+        A fan sent this DM to a creator: "${incomingText}"
+
+        The creator has these assets available to share:
+        ${JSON.stringify(assetCatalog, null, 2)}
+
+        Analyze the fan's message and determine:
+        1. Is this a GENERIC message (hi, hello, hey, what's up, random chat) or does the fan have a SPECIFIC intent?
+        2. If specific intent — which assets are most relevant? Match by meaning, not just keywords.
+
+        Return ONLY this JSON (no markdown):
+        {
+            "isGenericMessage": true/false,
+            "matchedAssetIds": ["id1", "id2"],
+            "matchReason": "why these assets match"
+        }
+
+        Rules:
+        - If generic → return empty matchedAssetIds (the system will use defaults)
+        - If specific → return up to 3 most relevant asset IDs, sorted by relevance
+        - Match by MEANING — "I want to get fit" should match fitness products even if the word "fitness" isn't in the message
+        - Simple reactions ("wow", "nice", emoji-only) are GENERIC
+        - Questions about pricing, courses, links, products = SPECIFIC
+        `;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        const cleaned = cleanJsonString(responseText);
+        const analysis = JSON.parse(cleaned);
+
+        let matchedAssets = [];
+
+        if (analysis.isGenericMessage) {
+            // Use default assets
+            matchedAssets = creatorAssets.filter(a => a.isDefault).sort((a, b) => b.priority - a.priority);
+            console.log(`[AI-Service] Generic DM detected. Using ${matchedAssets.length} default assets.`);
+        } else {
+            // Use AI-matched assets
+            const matchedIds = analysis.matchedAssetIds || [];
+            matchedAssets = matchedIds
+                .map(id => creatorAssets.find(a => a._id.toString() === id))
+                .filter(Boolean);
+            console.log(`[AI-Service] Specific intent detected: "${analysis.matchReason}". Matched ${matchedAssets.length} assets.`);
+        }
+
+        return {
+            matchedAssets,
+            isGenericMessage: Boolean(analysis.isGenericMessage),
+            matchReason: analysis.matchReason || ''
+        };
+
+    } catch (error) {
+        console.error('[AI-Service] Asset matching failed:', error.message);
+        // Fallback: return default assets
+        const defaults = creatorAssets.filter(a => a.isDefault);
+        return { matchedAssets: defaults, isGenericMessage: true, matchReason: 'fallback' };
+    }
+}
+
+
+// ==================== SMART DM REPLY WITH ASSETS ====================
+
+/**
+ * Generates an AI-powered DM reply with product/link/course recommendations.
+ * Combines creator persona + online research + asset context.
+ *
+ * @param {string} userId - Creator's Instagram ID
+ * @param {string} incomingText - The user's DM message
+ * @param {string} senderName - Username of the DM sender
+ * @param {Array} matchedAssets - Assets matched by intent or defaults
+ * @param {boolean} isGenericMessage - Whether the message is generic
+ * @returns {Promise<{text: string, recommendedAssets: Array, replyType: string}>}
+ */
+async function generateSmartDMReply(userId, incomingText, senderName, matchedAssets, isGenericMessage) {
+    try {
+        const persona = await CreatorPersona.findOne({ userId });
+
+        // Build asset context for the prompt
+        let assetContext = '';
+        if (matchedAssets && matchedAssets.length > 0) {
+            assetContext = matchedAssets.map(a => {
+                let info = `- ${a.type.toUpperCase()}: "${a.title}"`;
+                if (a.description) info += ` — ${a.description}`;
+                if (a.url) info += ` | Link: ${a.url}`;
+                if (a.price) info += ` | Price: ${a.price}`;
+                return info;
+            }).join('\n');
+        }
+
+        // Build persona context
+        let personaContext = '';
+        if (persona) {
+            personaContext = `
+            === YOUR PERSONALITY ===
+            - Style: ${persona.communicationStyle || 'casual and friendly'}
+            - Tone: ${(persona.toneKeywords || []).join(', ') || 'friendly'}
+            - Reply style: ${persona.replyStyle || 'casual'}
+            - Emoji: ${persona.emojiUsage || 'moderate'}
+            - ${persona.lowercasePreference ? 'You type in lowercase' : 'Normal capitalization'}
+            - Average reply length: ~${persona.averageReplyLength || 40} chars
+            `;
+
+            if (persona.onlineResearch?.niche) {
+                personaContext += `
+                === YOUR BRAND ===
+                - Niche: ${persona.onlineResearch.niche}
+                - Brand voice: ${persona.onlineResearch.brandVoice || 'casual'}
+                - Content themes: ${(persona.onlineResearch.contentThemes || []).join(', ')}
+                - Audience: ${persona.onlineResearch.audienceType || 'general'}
+                `;
+            }
+        }
+
+        let prompt;
+
+        if (matchedAssets.length > 0) {
+            prompt = `
+            You ARE this Instagram creator replying to a DM. Not an assistant. The actual human.
+
+            ${personaContext}
+
+            === YOUR PRODUCTS/LINKS TO SHARE ===
+            ${assetContext}
+
+            === THE DM ===
+            @${senderName}: "${incomingText}"
+            ${isGenericMessage ? '(This is a generic/casual message — naturally weave in your recommendations)' : '(The fan seems interested in something specific — share the relevant items)'}
+
+            Write a DM reply that:
+            1. Responds naturally to what they said (match your personality)
+            2. ${isGenericMessage
+                    ? 'Casually mentions your product/link/course — like a friend sharing something cool, NOT a salesperson'
+                    : 'Directly shares the relevant product/link/course since they asked about it'}
+            3. Include the actual URLs from the assets above
+            4. Keep it conversational — no bullet points, no "Here are my products"
+            5. Max 2-3 short sentences
+
+            SAFETY RULES:
+            - Never be pushy or salesy
+            - If hateful/abusive DM → reply with just "❤️" and do NOT share any links
+            - Stay authentic to your personality
+
+            Output ONLY your reply text. Nothing else.
+            `;
+        } else {
+            // No assets to share — just reply naturally
+            prompt = `
+            You ARE this Instagram creator replying to a DM. Not an assistant. The actual human.
+
+            ${personaContext}
+
+            @${senderName}: "${incomingText}"
+
+            Reply naturally in your style. Max 1-2 sentences.
+            SAFETY: If hateful → just "❤️". Never swear. Stay positive.
+
+            Output ONLY your reply. Nothing else.
+            `;
+        }
+
+        console.log('[AI-Service] Generating smart DM reply with asset context...');
+        const result = await model.generateContent(prompt);
+        const reply = result.response.text().trim().replace(/^["']|["']$/g, '');
+
+        if (!reply || reply.length === 0) {
+            return { text: '🔥', recommendedAssets: [], replyType: 'text' };
+        }
+
+        // Determine reply type
+        let replyType = 'text';
+        const recommendedAssets = matchedAssets.map(a => ({
+            assetId: a._id.toString(),
+            assetTitle: a.title,
+            assetType: a.type
+        }));
+
+        if (matchedAssets.length > 0) {
+            const hasImage = matchedAssets.some(a => a.imageUrl);
+            const hasUrl = matchedAssets.some(a => a.url);
+            if (hasImage) replyType = 'image';
+            else if (hasUrl) replyType = 'text_with_link';
+            if (matchedAssets.some(a => a.type === 'product' || a.type === 'course')) {
+                replyType = 'product_recommendation';
+            }
+        }
+
+        console.log(`[AI-Service] Smart DM reply generated: type=${replyType}, assets=${recommendedAssets.length}`);
+        return { text: reply, recommendedAssets, replyType };
+
+    } catch (error) {
+        console.error('[AI-Service] Smart DM reply generation failed:', error.message);
+        return { text: '🔥', recommendedAssets: [], replyType: 'text' };
+    }
+}
+
+
 module.exports = {
     analyzeProfile,
     generateSmartReply,
-    analyzeComment
+    analyzeComment,
+    researchCreatorOnline,
+    matchCreatorAssets,
+    generateSmartDMReply
 };

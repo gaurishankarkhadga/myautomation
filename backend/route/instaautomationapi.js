@@ -17,6 +17,7 @@ const {
 const CreatorPersona = require('../model/CreatorPersona');
 const aiService = require('../service/aiService');
 const brandDealService = require('../service/brandDealService');
+const CreatorAsset = require('../model/CreatorAsset');
 
 // Instagram Graph API Configuration
 const INSTAGRAM_CONFIG = {
@@ -123,10 +124,37 @@ async function deleteComment(commentId, accessToken) {
     }
 }
 
-async function sendDirectMessage(igUserId, recipientIGSID, message, accessToken) {
+async function sendDirectMessage(igUserId, recipientIGSID, message, accessToken, imageUrl = null) {
     try {
         console.log('[DM-AutoReply] Sending DM to IGSID:', recipientIGSID);
 
+        // Send image first if provided
+        if (imageUrl) {
+            try {
+                console.log('[DM-AutoReply] Sending image attachment:', imageUrl);
+                await axios.post(
+                    `${INSTAGRAM_CONFIG.graphBaseUrl}/${igUserId}/messages`,
+                    {
+                        recipient: { id: recipientIGSID },
+                        message: {
+                            attachment: {
+                                type: 'image',
+                                payload: { url: imageUrl }
+                            }
+                        }
+                    },
+                    {
+                        params: { access_token: accessToken },
+                        headers: { 'Content-Type': 'application/json' }
+                    }
+                );
+                console.log('[DM-AutoReply] Image sent successfully');
+            } catch (imgErr) {
+                console.error('[DM-AutoReply] Image send failed (continuing with text):', imgErr.response?.data?.error?.message || imgErr.message);
+            }
+        }
+
+        // Send text message
         const response = await axios.post(
             `${INSTAGRAM_CONFIG.graphBaseUrl}/${igUserId}/messages`,
             {
@@ -397,6 +425,7 @@ async function scheduleDMAutoReply(messageData, igUserId) {
     }
 
     const senderId = messageData.senderId;
+    const replyMode = settings.replyMode || 'static';
 
     // Don't reply to own messages (echo prevention)
     if (senderId === igUserId) {
@@ -417,7 +446,9 @@ async function scheduleDMAutoReply(messageData, igUserId) {
         await DmAutoReplyLog.create({
             senderId,
             messageText: messageData.text,
-            replyText: settings.message,
+            replyText: '',
+            replyType: 'text',
+            assetsShared: [],
             status: 'failed',
             error: 'No access token found',
             scheduledAt: new Date(),
@@ -426,21 +457,102 @@ async function scheduleDMAutoReply(messageData, igUserId) {
         return;
     }
 
-    let replyMessage = settings.message;
+    let replyMessage = '';
     let delaySeconds = settings.delaySeconds || 10;
+    let replyType = 'text';
+    let assetsShared = [];
+    let imageToSend = null;
 
-    // If message is empty, use AI
-    if (!replyMessage || replyMessage.trim() === '') {
-        console.log('[DM-AutoReply] Message empty, using AI generation...');
+    console.log(`[DM-AutoReply] Mode: ${replyMode} | Incoming: "${messageData.text}"`);
+
+    // ==================== MODE: STATIC ====================
+    if (replyMode === 'static') {
+        replyMessage = settings.message || 'Thanks for reaching out! ❤️';
+        console.log(`[DM-AutoReply] Static reply: "${replyMessage}"`);
+    }
+
+    // ==================== MODE: AI SMART ====================
+    else if (replyMode === 'ai_smart') {
+        console.log('[DM-AutoReply] AI Smart mode — generating persona-based reply...');
         try {
+            // Trigger online research if not done yet (background, non-blocking for future DMs)
+            const persona = await CreatorPersona.findOne({ userId: igUserId });
+            if (!persona?.onlineResearch?.researchedAt) {
+                // Try to get username for research
+                try {
+                    const profileRes = await axios.get(`${INSTAGRAM_CONFIG.graphBaseUrl}/me`, {
+                        params: { fields: 'username', access_token: tokenData.accessToken }
+                    });
+                    const username = profileRes.data.username;
+                    if (username) {
+                        // Non-blocking research
+                        aiService.researchCreatorOnline(igUserId, username)
+                            .then(r => console.log(`[DM-AutoReply] Online research triggered: ${r.success ? 'done' : 'failed'}`))
+                            .catch(e => console.error('[DM-AutoReply] Research error:', e.message));
+                    }
+                } catch (profileErr) {
+                    console.log('[DM-AutoReply] Could not fetch username for research:', profileErr.message);
+                }
+            }
+
             const aiResponse = await aiService.generateSmartReply(igUserId, messageData.text, 'dm', 'there');
             replyMessage = aiResponse;
-            // Random delay 4-5s
-            delaySeconds = Math.floor(Math.random() * (5 - 4 + 1)) + 4;
-            console.log(`[DM-AutoReply] AI Reply generated: "${replyMessage}"`);
+            // Random delay 4-8s for human-like timing
+            delaySeconds = Math.floor(Math.random() * (8 - 4 + 1)) + 4;
+            console.log(`[DM-AutoReply] AI Smart reply: "${replyMessage}"`);
         } catch (err) {
-            console.error('[DM-AutoReply] AI generation failed:', err.message);
-            replyMessage = "Thanks for reaching out! ❤️";
+            console.error('[DM-AutoReply] AI Smart generation failed:', err.message);
+            replyMessage = settings.message || 'Thanks for reaching out! ❤️';
+        }
+    }
+
+    // ==================== MODE: AI WITH ASSETS ====================
+    else if (replyMode === 'ai_with_assets') {
+        console.log('[DM-AutoReply] AI + Assets mode — matching intent and generating reply...');
+        try {
+            // Fetch creator's active assets
+            const creatorAssets = await CreatorAsset.find({ userId: igUserId, isActive: true })
+                .sort({ priority: -1 })
+                .lean();
+
+            console.log(`[DM-AutoReply] Creator has ${creatorAssets.length} active assets`);
+
+            if (creatorAssets.length === 0) {
+                // No assets — fallback to AI Smart
+                console.log('[DM-AutoReply] No assets found, falling back to AI Smart...');
+                const aiResponse = await aiService.generateSmartReply(igUserId, messageData.text, 'dm', 'there');
+                replyMessage = aiResponse;
+            } else {
+                // Step 1: Match user intent to assets
+                const matchResult = await aiService.matchCreatorAssets(messageData.text, creatorAssets);
+
+                // Step 2: Generate AI reply with matched assets
+                const dmReply = await aiService.generateSmartDMReply(
+                    igUserId,
+                    messageData.text,
+                    'there',
+                    matchResult.matchedAssets,
+                    matchResult.isGenericMessage
+                );
+
+                replyMessage = dmReply.text;
+                replyType = dmReply.replyType;
+                assetsShared = dmReply.recommendedAssets;
+
+                // Check if any matched asset has an image to send
+                const imageAsset = matchResult.matchedAssets.find(a => a.imageUrl);
+                if (imageAsset) {
+                    imageToSend = imageAsset.imageUrl;
+                }
+            }
+
+            // Random delay 5-10s
+            delaySeconds = Math.floor(Math.random() * (10 - 5 + 1)) + 5;
+            console.log(`[DM-AutoReply] AI + Assets reply: "${replyMessage}" | Assets: ${assetsShared.length} | Image: ${imageToSend ? 'yes' : 'no'}`);
+
+        } catch (err) {
+            console.error('[DM-AutoReply] AI + Assets generation failed:', err.message);
+            replyMessage = settings.message || 'Thanks for reaching out! ❤️';
         }
     }
 
@@ -452,6 +564,8 @@ async function scheduleDMAutoReply(messageData, igUserId) {
         senderId,
         messageText: messageData.text,
         replyText: replyMessage,
+        replyType,
+        assetsShared,
         status: 'pending',
         error: null,
         scheduledAt: new Date(),
@@ -459,7 +573,7 @@ async function scheduleDMAutoReply(messageData, igUserId) {
     });
 
     const timeoutId = setTimeout(async () => {
-        const result = await sendDirectMessage(igUserId, senderId, replyMessage, tokenData.accessToken);
+        const result = await sendDirectMessage(igUserId, senderId, replyMessage, tokenData.accessToken, imageToSend);
 
         // Update log entry in DB
         await DmAutoReplyLog.findByIdAndUpdate(logEntry._id, {
@@ -1246,7 +1360,7 @@ router.delete('/auto-reply/log', async (req, res) => {
 router.post('/dm-auto-reply/settings', async (req, res) => {
     try {
         const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
-        const { userId, enabled, delaySeconds, message } = req.body;
+        const { userId, enabled, delaySeconds, message, replyMode, aiPersonality } = req.body;
 
         if (!token || !userId) {
             return res.status(400).json({
@@ -1266,7 +1380,9 @@ router.post('/dm-auto-reply/settings', async (req, res) => {
                 userId,
                 enabled: Boolean(enabled),
                 delaySeconds: delay,
-                message: message ? message.trim() : ''
+                message: message ? message.trim() : '',
+                replyMode: replyMode || 'static',
+                aiPersonality: aiPersonality ? aiPersonality.trim() : ''
             },
             { upsert: true, new: true }
         );
@@ -1282,7 +1398,7 @@ router.post('/dm-auto-reply/settings', async (req, res) => {
             { upsert: true }
         );
 
-        console.log(`[DM-AutoReply] Settings saved for user ${userId}: enabled=${enabled}, delay=${delay}s`);
+        console.log(`[DM-AutoReply] Settings saved for user ${userId}: enabled=${enabled}, mode=${replyMode || 'static'}, delay=${delay}s`);
 
         const savedSettings = await DmAutoReplySetting.findOne({ userId }).lean();
 
@@ -1321,7 +1437,9 @@ router.get('/dm-auto-reply/settings', async (req, res) => {
             data: settings || {
                 enabled: false,
                 delaySeconds: 10,
-                message: 'Thanks for reaching out! I will get back to you shortly.'
+                message: 'Thanks for reaching out! I will get back to you shortly.',
+                replyMode: 'static',
+                aiPersonality: ''
             }
         });
 
@@ -1389,7 +1507,160 @@ router.delete('/dm-auto-reply/log', async (req, res) => {
     }
 });
 
-// ==================== WEBHOOK SUBSCRIPTION ====================
+// ==================== CREATOR ASSET ROUTES ====================
+
+// Route: Create a new creator asset
+router.post('/creator-assets', async (req, res) => {
+    try {
+        const { userId, type, title, description, url, imageUrl, price, tags, isDefault, priority } = req.body;
+
+        if (!userId || !type || !title) {
+            return res.status(400).json({
+                success: false,
+                error: 'userId, type, and title are required'
+            });
+        }
+
+        const asset = await CreatorAsset.create({
+            userId,
+            type,
+            title: title.trim(),
+            description: description ? description.trim() : '',
+            url: url ? url.trim() : '',
+            imageUrl: imageUrl ? imageUrl.trim() : '',
+            price: price ? price.trim() : '',
+            tags: Array.isArray(tags) ? tags.map(t => t.trim().toLowerCase()) : [],
+            isActive: true,
+            isDefault: Boolean(isDefault),
+            priority: parseInt(priority) || 0
+        });
+
+        console.log(`[Assets] Created asset "${title}" (${type}) for user ${userId}`);
+
+        res.json({
+            success: true,
+            message: 'Asset created successfully',
+            data: asset
+        });
+
+    } catch (error) {
+        console.error('[Assets] Create error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create asset',
+            message: error.message
+        });
+    }
+});
+
+// Route: Get all creator assets
+router.get('/creator-assets', async (req, res) => {
+    try {
+        const { userId, type } = req.query;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'userId query param is required'
+            });
+        }
+
+        const filter = { userId };
+        if (type) filter.type = type;
+
+        const assets = await CreatorAsset.find(filter)
+            .sort({ priority: -1, createdAt: -1 })
+            .lean();
+
+        res.json({
+            success: true,
+            count: assets.length,
+            data: assets
+        });
+
+    } catch (error) {
+        console.error('[Assets] List error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch assets',
+            message: error.message
+        });
+    }
+});
+
+// Route: Update a creator asset
+router.put('/creator-assets/:assetId', async (req, res) => {
+    try {
+        const { assetId } = req.params;
+        const updateData = req.body;
+
+        // Clean up tags if provided
+        if (updateData.tags && Array.isArray(updateData.tags)) {
+            updateData.tags = updateData.tags.map(t => t.trim().toLowerCase());
+        }
+
+        const asset = await CreatorAsset.findByIdAndUpdate(
+            assetId,
+            { ...updateData, updatedAt: new Date() },
+            { new: true }
+        );
+
+        if (!asset) {
+            return res.status(404).json({
+                success: false,
+                error: 'Asset not found'
+            });
+        }
+
+        console.log(`[Assets] Updated asset "${asset.title}" (${asset._id})`);
+
+        res.json({
+            success: true,
+            message: 'Asset updated successfully',
+            data: asset
+        });
+
+    } catch (error) {
+        console.error('[Assets] Update error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update asset',
+            message: error.message
+        });
+    }
+});
+
+// Route: Delete a creator asset
+router.delete('/creator-assets/:assetId', async (req, res) => {
+    try {
+        const { assetId } = req.params;
+
+        const asset = await CreatorAsset.findByIdAndDelete(assetId);
+
+        if (!asset) {
+            return res.status(404).json({
+                success: false,
+                error: 'Asset not found'
+            });
+        }
+
+        console.log(`[Assets] Deleted asset "${asset.title}" (${asset._id})`);
+
+        res.json({
+            success: true,
+            message: 'Asset deleted successfully'
+        });
+
+    } catch (error) {
+        console.error('[Assets] Delete error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete asset',
+            message: error.message
+        });
+    }
+});
+
 
 // Route: Subscribe to webhook fields
 router.post('/subscribe-webhooks', async (req, res) => {

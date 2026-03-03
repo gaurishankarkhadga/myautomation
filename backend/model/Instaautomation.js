@@ -26,7 +26,13 @@ const dmAutoReplySettingSchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true, index: true },
     enabled: { type: Boolean, default: false },
     delaySeconds: { type: Number, default: 10, min: 5, max: 300 },
-    message: { type: String, default: '' }
+    message: { type: String, default: '' },
+    replyMode: {
+        type: String,
+        enum: ['static', 'ai_smart', 'ai_with_assets'],
+        default: 'static'
+    },
+    aiPersonality: { type: String, default: '' } // Custom personality override
 });
 
 // ==================== AUTO-REPLY LOG (Comments) ====================
@@ -52,6 +58,16 @@ const dmAutoReplyLogSchema = new mongoose.Schema({
     senderIGSID: { type: String },
     messageText: { type: String },
     replyText: { type: String },
+    replyType: {
+        type: String,
+        enum: ['text', 'text_with_link', 'image', 'product_recommendation'],
+        default: 'text'
+    },
+    assetsShared: [{
+        assetId: String,
+        assetTitle: String,
+        assetType: String
+    }],
     status: { type: String, enum: ['pending', 'sent', 'failed'], default: 'pending' },
     error: { type: String, default: null },
     scheduledAt: { type: Date, default: Date.now },

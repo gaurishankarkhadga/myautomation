@@ -902,3 +902,292 @@ h1 {
     font-size: 1.3rem;
   }
 }
+
+/* ==================== CREATOR ASSETS SECTION ==================== */
+
+.assets-section {
+  border-top: 1px solid #2a2a3e;
+  padding-top: 25px;
+  margin-top: 10px;
+}
+
+.assets-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.assets-header h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.15rem;
+}
+
+.btn-add-asset {
+  background: linear-gradient(135deg, #E1306C 0%, #C13584 100%) !important;
+  color: white !important;
+  border: none !important;
+  font-weight: 600;
+}
+
+.btn-add-asset:hover {
+  box-shadow: 0 4px 16px rgba(225, 48, 108, 0.4);
+}
+
+.assets-desc {
+  color: #7a9ec7;
+  font-size: 0.82rem;
+  margin: 0 0 18px 0;
+  line-height: 1.4;
+}
+
+/* Asset Form */
+.asset-form {
+  background: #0d0d1a;
+  border: 1px solid #2a2a3e;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 18px;
+}
+
+.asset-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.form-full {
+  grid-column: 1 / -1;
+}
+
+.form-inline {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.82rem;
+  color: #b0b0c8;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  background: #151528;
+  border: 1px solid #3a3a5c;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.88rem;
+  font-family: inherit;
+  transition: border-color 0.3s;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #E1306C;
+}
+
+.form-group select {
+  cursor: pointer;
+}
+
+/* Asset List */
+.asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.asset-card {
+  background: #0d0d1a;
+  border: 1px solid #2a2a3e;
+  border-radius: 10px;
+  padding: 14px;
+  transition: border-color 0.2s;
+}
+
+.asset-card:hover {
+  border-color: #3a3a5c;
+}
+
+.asset-card.asset-inactive {
+  opacity: 0.5;
+}
+
+.asset-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.asset-type-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.asset-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.asset-title {
+  font-weight: 600;
+  color: #e0e0f0;
+  font-size: 0.95rem;
+}
+
+.asset-desc {
+  font-size: 0.82rem;
+  color: #888;
+  line-height: 1.3;
+}
+
+.asset-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.badge-default {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #ffab40;
+  background: rgba(255, 171, 64, 0.12);
+}
+
+.badge-type {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #b0b0c8;
+  background: rgba(176, 176, 200, 0.12);
+}
+
+.badge-product { color: #7c4dff; background: rgba(124, 77, 255, 0.12); }
+.badge-link { color: #29b6f6; background: rgba(41, 182, 246, 0.12); }
+.badge-course { color: #26a69a; background: rgba(38, 166, 154, 0.12); }
+.badge-image { color: #ec407a; background: rgba(236, 64, 122, 0.12); }
+.badge-service { color: #ff7043; background: rgba(255, 112, 67, 0.12); }
+.badge-ebook { color: #66bb6a; background: rgba(102, 187, 106, 0.12); }
+.badge-merch { color: #ab47bc; background: rgba(171, 71, 188, 0.12); }
+
+.asset-url,
+.asset-price {
+  display: block;
+  font-size: 0.78rem;
+  color: #666;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+
+.asset-tag {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #1a1a2e;
+  border: 1px solid #2a2a3e;
+  color: #b0b0c8;
+}
+
+.asset-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.btn-tiny {
+  background: #1a1a2e;
+  color: #b0b0c8;
+  border: 1px solid #2a2a3e;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-tiny:hover {
+  background: #2a2a3e;
+  color: #fff;
+}
+
+.btn-tiny.btn-danger:hover {
+  background: rgba(255, 82, 82, 0.15);
+  color: #ff5252;
+}
+
+/* ==================== ENHANCED DM LOG ==================== */
+
+.log-reply-type {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #7c4dff;
+  background: rgba(124, 77, 255, 0.12);
+}
+
+.log-assets-shared {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+
+.log-asset-badge {
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: rgba(225, 48, 108, 0.1);
+  border: 1px solid rgba(225, 48, 108, 0.2);
+  color: #c8a0b0;
+}
+
+/* Responsive Assets */
+@media (max-width: 520px) {
+  .asset-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-card-top {
+    flex-direction: column;
+  }
+
+  .asset-badges {
+    align-self: flex-start;
+  }
+
+  .assets-header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+}

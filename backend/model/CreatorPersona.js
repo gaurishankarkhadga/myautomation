@@ -30,7 +30,19 @@ const creatorPersonaSchema = new mongoose.Schema({
     sampleReplies: [{
         context: String,
         reply: String
-    }]
+    }],
+
+    // Google-researched creator info for deep persona mimicry
+    onlineResearch: {
+        niche: { type: String, default: '' },
+        brandVoice: { type: String, default: '' },
+        publicLinks: { type: [String], default: [] },
+        knownPlatforms: { type: [String], default: [] },
+        contentThemes: { type: [String], default: [] },
+        audienceType: { type: String, default: '' },
+        rawResearch: { type: String, default: '' },
+        researchedAt: { type: Date }
+    }
 });
 
 module.exports = mongoose.model('CreatorPersona', creatorPersonaSchema);
