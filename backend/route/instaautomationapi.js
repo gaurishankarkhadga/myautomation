@@ -244,7 +244,7 @@ async function resolveUserIdMapping(igUserId) {
         if (dmSettings) {
             await DmAutoReplySetting.findOneAndUpdate(
                 { userId: igUserId },
-                { userId: igUserId, enabled: dmSettings.enabled, delaySeconds: dmSettings.delaySeconds, message: dmSettings.message },
+                { userId: igUserId, enabled: dmSettings.enabled, delaySeconds: dmSettings.delaySeconds, message: dmSettings.message, replyMode: dmSettings.replyMode || 'static', aiPersonality: dmSettings.aiPersonality || '' },
                 { upsert: true }
             );
             console.log(`[ID-Mapping] DM auto-reply settings synced to ${igUserId}: enabled=${dmSettings.enabled}`);
