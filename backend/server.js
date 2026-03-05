@@ -58,6 +58,9 @@ app.use('/api/instagram', instaRoutes);
 const youtubeRoutes = require('./route/youtubeapi');
 app.use('/api/youtube', youtubeRoutes);
 
+const chatRoutes = require('./route/chatapi');
+app.use('/api/chat', chatRoutes);
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({
