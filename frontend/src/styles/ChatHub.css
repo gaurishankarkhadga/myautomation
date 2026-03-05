@@ -204,6 +204,63 @@
     cursor: wait;
 }
 
+/* ==================== ACTIVE AUTOMATIONS BADGE ==================== */
+.sidebar-active-badge {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(200, 200, 230, 0.6);
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    text-align: left;
+}
+
+.sidebar-active-badge.has-active {
+    background: rgba(52, 211, 153, 0.06);
+    border-color: rgba(52, 211, 153, 0.15);
+    color: #e2e8f0;
+}
+
+.sidebar-active-badge.has-active:hover {
+    background: rgba(52, 211, 153, 0.12);
+    border-color: rgba(52, 211, 153, 0.3);
+    box-shadow: 0 0 12px rgba(52, 211, 153, 0.1);
+}
+
+.sidebar-active-badge.no-active:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.active-dot {
+    font-size: 14px;
+}
+
+.active-label {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.sidebar-active-badge.has-active .active-label {
+    color: #34d399;
+}
+
+.active-details {
+    width: 100%;
+    font-size: 11px;
+    color: rgba(200, 200, 230, 0.5);
+    padding-left: 22px;
+}
+
 /* ==================== SIDEBAR BOTTOM ==================== */
 .sidebar-bottom {
     padding: 12px;

@@ -61,41 +61,70 @@ function getIntentList() {
 async function parseIntents(message, context) {
     const intentList = getIntentList();
 
-    const prompt = `You are an AI assistant for a social media management platform called CreatorHub.
-Your job is to understand what the creator wants and convert their message into structured action intents.
+    const prompt = `You are the AI brain of CreatorHub — a social media management platform for creators.
+Your job: understand ANYTHING the creator says (no matter how vague, messy, or creative) and convert it into structured action intents.
 
-IMPORTANT RULES:
-1. The user may be VAGUE, use partial sentences, broken English, Hindi, or mixed language (Hinglish). ALWAYS try to understand what they WANT.
-2. If the message contains MULTIPLE requests, split them into SEPARATE intents.
-3. Return a JSON array of intent objects. Each object has: "intent" (string), "params" (object), "confidence" (number 0-1).
-4. If the message is just a general question or conversation (not an action), use intent "general_chat".
-5. For unclear intents, pick the MOST LIKELY one with lower confidence.
+CRITICAL RULES:
+1. Creators are NOT tech-savvy. They write casually: typos, slang, abbreviations, emojis, Hinglish (Hindi+English), mixed languages, or just vibes. ALWAYS figure out what they ACTUALLY mean.
+2. If the message has MULTIPLE requests, split into SEPARATE intents and execute ALL of them.
+3. Return a JSON array of intent objects: {"intent": "<name>", "params": {}, "confidence": 0.0-1.0}
+4. If they're just chatting, greeting, or asking a question → use "general_chat".
+5. When UNSURE, pick the MOST LIKELY intent with lower confidence (0.5-0.7). NEVER ignore a request.
+6. INFER missing details smartly:
+   - "turn on replies" → they mean AI smart mode (best default)
+   - "recent video" / "latest reel" / "last post" → target: "recent"
+   - "my first post" / "oldest video" → target: "first"
+   - "previous one" / "second last" → target: "previous"
+   - "for few hours" → default 6 hours
+   - "some comments" / "not all" → default 50 comments
+   - "sab kuch chalu kar" → enable_all_automation
+   - "band karo" / "sab band" → disable_all_automation
+7. If the creator mentions a NUMBER (like "100", "50", "24"), figure out if it's hours, comment count, or price from CONTEXT.
+8. If the creator mentions a platform name ("youtube", "insta", "all"), map it to platform preferences.
+9. Common abbreviations: "dm" = direct message, "yt" = youtube, "insta/ig" = instagram, "auto" = automation, "hrs" = hours
 
 AVAILABLE INTENTS:
 ${intentList}
-- general_chat (for general questions, greetings, help, or anything not matching above)
+- general_chat (for general questions, greetings, help, feedback, or anything not matching above)
 
 CONTEXT:
 - Creator's userId: ${context.userId}
-- Platform: Instagram
-- The creator is managing their social media automation through this chat.
+- Connected platforms: Instagram, YouTube (possibly)
+- The creator manages their social media automation through this chat.
 
-EXAMPLES:
+EXAMPLES (covering diverse real-world inputs):
 User: "replies on" → [{"intent": "enable_comment_autoreply", "params": {"mode": "ai_smart"}, "confidence": 0.85}]
 User: "stop dms" → [{"intent": "disable_dm_autoreply", "params": {}, "confidence": 0.9}]
 User: "add course 29$ xyz.com" → [{"intent": "add_asset", "params": {"type": "course", "price": "29", "url": "xyz.com", "title": "Course"}, "confidence": 0.8}]
 User: "what's happening" → [{"intent": "get_status", "params": {}, "confidence": 0.85}]
 User: "turn on replies and find deals" → [{"intent": "enable_comment_autoreply", "params": {"mode": "ai_smart"}, "confidence": 0.9}, {"intent": "find_brand_deals", "params": {}, "confidence": 0.9}]
 User: "deal milao" → [{"intent": "find_brand_deals", "params": {}, "confidence": 0.85}]
-User: "add my ebook Digital Marketing Guide, price 15$, link ebook.com, also enable smart dm replies" → [{"intent": "add_asset", "params": {"type": "ebook", "title": "Digital Marketing Guide", "price": "15", "url": "ebook.com"}, "confidence": 0.95}, {"intent": "enable_dm_autoreply", "params": {"mode": "ai_with_assets"}, "confidence": 0.9}]
 User: "hello" → [{"intent": "general_chat", "params": {}, "confidence": 1.0}]
-User: "show my comments" → [{"intent": "get_comments_log", "params": {}, "confidence": 0.9}]
-User: "subscribe webhooks" → [{"intent": "subscribe_webhooks", "params": {}, "confidence": 0.95}]
-User: "show profile" → [{"intent": "get_profile", "params": {}, "confidence": 0.95}]
+User: "only automate my recent video" → [{"intent": "set_content_target", "params": {"target": "recent"}, "confidence": 0.9}]
+User: "reply to top 100 comments only" → [{"intent": "set_comment_limit", "params": {"maxReplies": 100}, "confidence": 0.9}]
+User: "automate all platforms" → [{"intent": "enable_all_automation", "params": {"mode": "ai_smart"}, "confidence": 0.9}]
+User: "only automate first video and reply to 50 comments for 12 hours" → [{"intent": "set_content_target", "params": {"target": "first"}, "confidence": 0.9}, {"intent": "set_comment_limit", "params": {"maxReplies": 50}, "confidence": 0.9}, {"intent": "set_time_limit", "params": {"hours": 12}, "confidence": 0.9}]
+
+ADVANCED EXAMPLES (messy, creative, real-world):
+User: "bhai sab chalu kr de 2 ghante ke liye" → [{"intent": "enable_all_automation", "params": {"mode": "ai_smart"}, "confidence": 0.85}, {"intent": "set_time_limit", "params": {"hours": 2}, "confidence": 0.85}]
+User: "meri latest reel pe comments ka reply kr" → [{"intent": "enable_comment_autoreply", "params": {"mode": "ai_smart"}, "confidence": 0.85}, {"intent": "set_content_target", "params": {"target": "recent"}, "confidence": 0.85}]
+User: "just do 50 and stop" → [{"intent": "set_comment_limit", "params": {"maxReplies": 50}, "confidence": 0.8}]
+User: "i want auto reply on my dm and comments both for 6 hrs" → [{"intent": "enable_comment_autoreply", "params": {"mode": "ai_smart"}, "confidence": 0.9}, {"intent": "enable_dm_autoreply", "params": {"mode": "ai_smart"}, "confidence": 0.9}, {"intent": "set_time_limit", "params": {"hours": 6}, "confidence": 0.9}]
+User: "pause for now" → [{"intent": "disable_all_automation", "params": {}, "confidence": 0.8}]
+User: "kl se band kr dena" → [{"intent": "set_time_limit", "params": {"hours": 24}, "confidence": 0.7}]
+User: "only yt" → [{"intent": "set_platform_preference", "params": {"instagram": false, "youtube": true}, "confidence": 0.85}]
+User: "mere recent wale pe 100 comments kr de" → [{"intent": "set_content_target", "params": {"target": "recent"}, "confidence": 0.85}, {"intent": "set_comment_limit", "params": {"maxReplies": 100}, "confidence": 0.85}]
+User: "how many replies have u done?" → [{"intent": "get_status", "params": {}, "confidence": 0.85}]
+User: "can you handle my youtube too?" → [{"intent": "set_platform_preference", "params": {"instagram": true, "youtube": true}, "confidence": 0.8}]
+User: "add my course link mysite.com/course price 49 and turn on smart dm" → [{"intent": "add_asset", "params": {"type": "course", "url": "mysite.com/course", "price": "49", "title": "Course"}, "confidence": 0.9}, {"intent": "enable_dm_autoreply", "params": {"mode": "ai_with_assets"}, "confidence": 0.9}]
+User: "setting dikha" → [{"intent": "get_preferences", "params": {}, "confidence": 0.85}]
+User: "sab reset kr de" → [{"intent": "reset_preferences", "params": {}, "confidence": 0.9}]
+User: "if dm fails send 'hey will reply soon'" → [{"intent": "set_dm_fallback", "params": {"message": "hey will reply soon"}, "confidence": 0.9}]
+User: "run for 1 hour only on latest post, 30 comments max" → [{"intent": "set_content_target", "params": {"target": "recent"}, "confidence": 0.9}, {"intent": "set_time_limit", "params": {"hours": 1}, "confidence": 0.9}, {"intent": "set_comment_limit", "params": {"maxReplies": 30}, "confidence": 0.9}]
 
 USER MESSAGE: "${message}"
 
-Return ONLY a valid JSON array. No markdown, no explanation. Just the JSON array.`;
+Return ONLY a valid JSON array. No markdown, no explanation, no extra text. Just the JSON array.`;
 
     try {
         const result = await model.generateContent(prompt);
@@ -232,6 +261,12 @@ Your capabilities:
 - Find and list brand deals
 - Show automation status and logs
 - Analyze creator persona for AI-powered replies
+- Set content targeting (all, recent, first, previous, specific post)
+- Set time limits (auto-stop after N hours)
+- Set comment limits (reply to max N comments)
+- Cross-platform automation (enable/disable all at once)
+- Set fallback DM message (used when AI fails)
+- Show and reset automation preferences
 
 Creator's message: "${message}"
 
@@ -270,6 +305,7 @@ function formatIntentTitle(intent) {
         'enable_dm_autoreply': 'DM Auto-Reply',
         'disable_dm_autoreply': 'DM Auto-Reply',
         'configure_dm_autoreply': 'DM Settings',
+        'set_dm_fallback': 'DM Fallback',
         'add_asset': 'Asset Added',
         'list_assets': 'Your Assets',
         'delete_asset': 'Asset Deleted',
@@ -282,6 +318,14 @@ function formatIntentTitle(intent) {
         'get_status': 'Status',
         'get_comments_log': 'Comment Log',
         'get_dm_log': 'DM Log',
+        'set_content_target': 'Content Target',
+        'set_time_limit': 'Time Limit',
+        'set_comment_limit': 'Comment Limit',
+        'get_preferences': 'Preferences',
+        'reset_preferences': 'Reset Preferences',
+        'enable_all_automation': 'All Automation',
+        'disable_all_automation': 'All Automation',
+        'set_platform_preference': 'Platform Preference',
         'general_chat': 'Chat'
     };
 

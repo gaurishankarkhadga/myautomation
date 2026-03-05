@@ -71,4 +71,34 @@ router.get('/history/:userId', async (req, res) => {
     }
 });
 
+// GET /api/chat/active-count/:userId — Get count of active automations (for sidebar badge)
+router.get('/active-count/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const AutoReplySetting = require('../model/Instaautomation').AutoReplySetting;
+        const DmAutoReplySetting = require('../model/Instaautomation').DmAutoReplySetting;
+
+        const [commentSettings, dmSettings] = await Promise.all([
+            AutoReplySetting.findOne({ userId }).lean(),
+            DmAutoReplySetting.findOne({ userId }).lean()
+        ]);
+
+        let activeCount = 0;
+        const activeList = [];
+
+        if (commentSettings?.enabled) {
+            activeCount++;
+            activeList.push('💬 Comments');
+        }
+        if (dmSettings?.enabled) {
+            activeCount++;
+            activeList.push('✉️ DMs');
+        }
+
+        res.json({ success: true, activeCount, activeList });
+    } catch (error) {
+        res.json({ success: true, activeCount: 0, activeList: [] });
+    }
+});
+
 module.exports = router;

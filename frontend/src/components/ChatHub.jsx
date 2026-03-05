@@ -39,6 +39,9 @@ function ChatHub() {
     });
     const [connectingPlatform, setConnectingPlatform] = useState(null);
 
+    // Active automations
+    const [activeAutomations, setActiveAutomations] = useState({ count: 0, list: [] });
+
     // Refs
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
@@ -75,7 +78,17 @@ function ChatHub() {
             fetchProfile();
             loadChatHistory();
         }
+        if (userId) {
+            fetchActiveCount();
+        }
     }, [token, userId]);
+
+    // ==================== POLL ACTIVE AUTOMATIONS (every 30s) ====================
+    useEffect(() => {
+        if (!userId) return;
+        const interval = setInterval(fetchActiveCount, 30000);
+        return () => clearInterval(interval);
+    }, [userId]);
 
     // ==================== AUTO-SCROLL ====================
     useEffect(() => {
@@ -94,6 +107,19 @@ function ChatHub() {
             if (data.success) setProfile(data.data);
         } catch (err) {
             console.error('Profile fetch failed:', err);
+        }
+    };
+
+    // ==================== FETCH ACTIVE COUNT ====================
+    const fetchActiveCount = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/chat/active-count/${userId}`);
+            const data = await response.json();
+            if (data.success) {
+                setActiveAutomations({ count: data.activeCount, list: data.activeList });
+            }
+        } catch (err) {
+            console.error('Active count fetch failed:', err);
         }
     };
 
@@ -258,6 +284,29 @@ function ChatHub() {
                         <span className="sidebar-connected-badge">● Connected</span>
                     </div>
                 )}
+
+                {/* Active Automations Badge */}
+                <div className="sidebar-section">
+                    <h3 className="sidebar-section-title">Active Automations</h3>
+                    <button
+                        className={`sidebar-active-badge ${activeAutomations.count > 0 ? 'has-active' : 'no-active'}`}
+                        onClick={() => { sendMessage("Show my active automations with video details"); setSidebarOpen(false); }}
+                        id="active-automations-badge"
+                    >
+                        <span className="active-dot">{activeAutomations.count > 0 ? '🟢' : '💤'}</span>
+                        <span className="active-label">
+                            {activeAutomations.count > 0
+                                ? `${activeAutomations.count} Running`
+                                : 'None Active'
+                            }
+                        </span>
+                        {activeAutomations.count > 0 && (
+                            <span className="active-details">
+                                {activeAutomations.list.join(' · ')}
+                            </span>
+                        )}
+                    </button>
+                </div>
 
                 {/* Connections */}
                 <div className="sidebar-section">
