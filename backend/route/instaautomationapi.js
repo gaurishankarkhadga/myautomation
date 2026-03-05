@@ -459,96 +459,87 @@ async function scheduleDMAutoReply(messageData, igUserId) {
     let assetsShared = [];
     let imageToSend = null;
 
-    console.log(`[DM-AutoReply] Mode: ${replyMode} | Incoming: "${messageData.text}"`);
+    console.log(`[DM-AutoReply] FORCED AI MODE | Incoming: "${messageData.text}"`);
 
-    // ==================== MODE: STATIC ====================
-    if (replyMode === 'static') {
-        replyMessage = settings.message || 'Thanks for reaching out! ❤️';
-        console.log(`[DM-AutoReply] Static reply: "${replyMessage}"`);
-    }
+    // ==================== ALWAYS AI — TRY ASSETS FIRST, FALLBACK TO SMART ====================
+    try {
+        // Step 1: Check if creator has active assets
+        const creatorAssets = await CreatorAsset.find({ userId: igUserId, isActive: true })
+            .sort({ priority: -1 })
+            .lean();
 
-    // ==================== MODE: AI SMART ====================
-    else if (replyMode === 'ai_smart') {
-        console.log('[DM-AutoReply] AI Smart mode — generating persona-based reply...');
-        try {
-            // Trigger online research if not done yet (background, non-blocking for future DMs)
-            const persona = await CreatorPersona.findOne({ userId: igUserId });
-            if (!persona?.onlineResearch?.researchedAt) {
-                // Try to get username for research
-                try {
-                    const profileRes = await axios.get(`${INSTAGRAM_CONFIG.graphBaseUrl}/me`, {
-                        params: { fields: 'username', access_token: tokenData.accessToken }
-                    });
-                    const username = profileRes.data.username;
-                    if (username) {
-                        // Non-blocking research
-                        aiService.researchCreatorOnline(igUserId, username)
-                            .then(r => console.log(`[DM-AutoReply] Online research triggered: ${r.success ? 'done' : 'failed'}`))
-                            .catch(e => console.error('[DM-AutoReply] Research error:', e.message));
-                    }
-                } catch (profileErr) {
-                    console.log('[DM-AutoReply] Could not fetch username for research:', profileErr.message);
+        console.log(`[DM-AutoReply] Creator has ${creatorAssets.length} active assets`);
+
+        // Trigger online research if not done yet (non-blocking)
+        const persona = await CreatorPersona.findOne({ userId: igUserId });
+        if (!persona?.onlineResearch?.researchedAt) {
+            try {
+                const profileRes = await axios.get(`${INSTAGRAM_CONFIG.graphBaseUrl}/me`, {
+                    params: { fields: 'username', access_token: tokenData.accessToken }
+                });
+                const username = profileRes.data.username;
+                if (username) {
+                    aiService.researchCreatorOnline(igUserId, username)
+                        .then(r => console.log(`[DM-AutoReply] Online research triggered: ${r.success ? 'done' : 'failed'}`))
+                        .catch(e => console.error('[DM-AutoReply] Research error:', e.message));
                 }
+            } catch (profileErr) {
+                console.log('[DM-AutoReply] Could not fetch username for research:', profileErr.message);
             }
-
-            const aiResponse = await aiService.generateSmartReply(igUserId, messageData.text, 'dm', 'there');
-            replyMessage = aiResponse;
-            // Random delay 4-8s for human-like timing
-            delaySeconds = Math.floor(Math.random() * (8 - 4 + 1)) + 4;
-            console.log(`[DM-AutoReply] AI Smart reply: "${replyMessage}"`);
-        } catch (err) {
-            console.error('[DM-AutoReply] AI Smart generation failed:', err.message);
-            replyMessage = settings.message || 'Thanks for reaching out! ❤️';
         }
-    }
 
-    // ==================== MODE: AI WITH ASSETS ====================
-    else if (replyMode === 'ai_with_assets') {
-        console.log('[DM-AutoReply] AI + Assets mode — matching intent and generating reply...');
-        try {
-            // Fetch creator's active assets
-            const creatorAssets = await CreatorAsset.find({ userId: igUserId, isActive: true })
-                .sort({ priority: -1 })
-                .lean();
+        // Step 2: If assets exist, use AI + Assets mode
+        if (creatorAssets.length > 0) {
+            console.log('[DM-AutoReply] Using AI + Assets mode...');
+            const matchResult = await aiService.matchCreatorAssets(messageData.text, creatorAssets);
+            const dmReply = await aiService.generateSmartDMReply(
+                igUserId,
+                messageData.text,
+                'there',
+                matchResult.matchedAssets,
+                matchResult.isGenericMessage
+            );
 
-            console.log(`[DM-AutoReply] Creator has ${creatorAssets.length} active assets`);
+            replyMessage = dmReply.text;
+            replyType = dmReply.replyType;
+            assetsShared = dmReply.recommendedAssets;
 
-            if (creatorAssets.length === 0) {
-                // No assets — fallback to AI Smart
-                console.log('[DM-AutoReply] No assets found, falling back to AI Smart...');
-                const aiResponse = await aiService.generateSmartReply(igUserId, messageData.text, 'dm', 'there');
-                replyMessage = aiResponse;
-            } else {
-                // Step 1: Match user intent to assets
-                const matchResult = await aiService.matchCreatorAssets(messageData.text, creatorAssets);
-
-                // Step 2: Generate AI reply with matched assets
-                const dmReply = await aiService.generateSmartDMReply(
-                    igUserId,
-                    messageData.text,
-                    'there',
-                    matchResult.matchedAssets,
-                    matchResult.isGenericMessage
-                );
-
-                replyMessage = dmReply.text;
-                replyType = dmReply.replyType;
-                assetsShared = dmReply.recommendedAssets;
-
-                // Check if any matched asset has an image to send
-                const imageAsset = matchResult.matchedAssets.find(a => a.imageUrl);
-                if (imageAsset) {
-                    imageToSend = imageAsset.imageUrl;
-                }
+            const imageAsset = matchResult.matchedAssets.find(a => a.imageUrl);
+            if (imageAsset) {
+                imageToSend = imageAsset.imageUrl;
             }
+        } else {
+            // Step 3: No assets — use AI Smart (persona-based)
+            console.log('[DM-AutoReply] Using AI Smart mode (no assets)...');
+            replyMessage = await aiService.generateSmartReply(igUserId, messageData.text, 'dm', 'there');
+        }
 
-            // Random delay 5-10s
-            delaySeconds = Math.floor(Math.random() * (10 - 5 + 1)) + 5;
-            console.log(`[DM-AutoReply] AI + Assets reply: "${replyMessage}" | Assets: ${assetsShared.length} | Image: ${imageToSend ? 'yes' : 'no'}`);
+        // Random delay 4-8s for human-like timing
+        delaySeconds = Math.floor(Math.random() * (8 - 4 + 1)) + 4;
+        console.log(`[DM-AutoReply] AI reply generated: "${replyMessage}" | Assets: ${assetsShared.length} | Image: ${imageToSend ? 'yes' : 'no'}`);
 
-        } catch (err) {
-            console.error('[DM-AutoReply] AI + Assets generation failed:', err.message);
-            replyMessage = settings.message || 'Thanks for reaching out! ❤️';
+    } catch (err) {
+        console.error('[DM-AutoReply] AI generation failed:', err.message);
+
+        // Use creator's own fallback message (set via chat) — if they set one
+        if (settings.message && settings.message.trim().length > 0) {
+            replyMessage = settings.message;
+            console.log(`[DM-AutoReply] Using creator's fallback: "${replyMessage}"`);
+        } else {
+            // No fallback set — DON'T send anything, just log
+            console.log('[DM-AutoReply] No fallback message set by creator. Skipping reply. Creator can set one via chat.');
+            await DmAutoReplyLog.create({
+                senderId,
+                messageText: messageData.text,
+                replyText: '',
+                replyType: 'text',
+                assetsShared: [],
+                status: 'failed',
+                error: 'AI generation failed and no fallback message configured',
+                scheduledAt: new Date(),
+                repliedAt: null
+            });
+            return;
         }
     }
 

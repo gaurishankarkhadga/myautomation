@@ -7,7 +7,7 @@ const {
 
 module.exports = {
     name: 'dmAutoReply',
-    intents: ['enable_dm_autoreply', 'disable_dm_autoreply', 'configure_dm_autoreply'],
+    intents: ['enable_dm_autoreply', 'disable_dm_autoreply', 'configure_dm_autoreply', 'set_dm_fallback'],
 
     async execute(intent, params, context) {
         const { userId } = context;
@@ -74,6 +74,29 @@ module.exports = {
                     success: true,
                     message: `DM auto-reply updated! ${Object.keys(update).map(k => `${k}: ${update[k]}`).join(', ')}`,
                     data: setting.toObject()
+                };
+            }
+
+            if (intent === 'set_dm_fallback') {
+                const fallbackMsg = params.message || params.fallback || params.text;
+
+                if (!fallbackMsg || fallbackMsg.trim().length === 0) {
+                    return {
+                        success: false,
+                        message: 'What should I use as your fallback DM message? Just tell me the message you want sent when AI can\'t generate a reply.'
+                    };
+                }
+
+                await DmAutoReplySetting.findOneAndUpdate(
+                    { userId },
+                    { userId, message: fallbackMsg.trim() },
+                    { upsert: true }
+                );
+
+                return {
+                    success: true,
+                    message: `✅ Fallback message set! If AI ever fails, I'll send: "${fallbackMsg.trim()}"`,
+                    data: { fallbackMessage: fallbackMsg.trim() }
                 };
             }
 
