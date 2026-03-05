@@ -139,6 +139,71 @@
     color: #c4b5fd;
 }
 
+/* ==================== CONNECTIONS ==================== */
+.sidebar-connection {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(52, 211, 153, 0.06);
+    border: 1px solid rgba(52, 211, 153, 0.12);
+    margin-bottom: 6px;
+}
+
+.conn-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.conn-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.conn-status.connected {
+    font-size: 11px;
+    color: #34d399;
+    font-weight: 500;
+}
+
+.sidebar-connect-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(200, 200, 230, 0.7);
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    margin-bottom: 6px;
+    text-align: left;
+}
+
+.sidebar-connect-btn.instagram:hover {
+    background: linear-gradient(135deg, rgba(225, 48, 108, 0.12), rgba(131, 58, 180, 0.12));
+    border-color: rgba(225, 48, 108, 0.3);
+    color: #e1306c;
+}
+
+.sidebar-connect-btn.youtube:hover {
+    background: rgba(255, 0, 0, 0.08);
+    border-color: rgba(255, 0, 0, 0.25);
+    color: #ff4444;
+}
+
+.sidebar-connect-btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
 /* ==================== SIDEBAR BOTTOM ==================== */
 .sidebar-bottom {
     padding: 12px;

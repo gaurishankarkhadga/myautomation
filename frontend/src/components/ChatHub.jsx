@@ -32,6 +32,13 @@ function ChatHub() {
     // Sidebar
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
+    // Connection states
+    const [connections, setConnections] = useState({
+        instagram: false,
+        youtube: false
+    });
+    const [connectingPlatform, setConnectingPlatform] = useState(null);
+
     // Refs
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
@@ -39,14 +46,24 @@ function ChatHub() {
     // Toasts
     const { toasts, addToasts, removeToast } = useToasts();
 
-    // ==================== AUTH CHECK ====================
+    // ==================== AUTH CHECK + CONNECTION STATUS ====================
     useEffect(() => {
         const storedToken = localStorage.getItem('insta_token');
         const storedUserId = localStorage.getItem('insta_user_id');
+        const ytChannelId = localStorage.getItem('yt_channel_id');
+
+        // Check which platforms are connected
+        setConnections({
+            instagram: !!(storedToken && storedUserId),
+            youtube: !!ytChannelId
+        });
 
         if (storedToken && storedUserId) {
             setToken(storedToken);
             setUserId(storedUserId);
+        } else if (ytChannelId) {
+            // YouTube connected but no Instagram — still allow chat
+            setUserId(ytChannelId);
         } else {
             navigate('/');
         }
@@ -160,7 +177,29 @@ function ChatHub() {
     const handleDisconnect = () => {
         localStorage.removeItem('insta_token');
         localStorage.removeItem('insta_user_id');
+        localStorage.removeItem('yt_channel_id');
+        localStorage.removeItem('yt_channel_title');
         navigate('/');
+    };
+
+    // ==================== CONNECT PLATFORM ====================
+    const handleConnectPlatform = async (platform) => {
+        setConnectingPlatform(platform);
+        try {
+            const endpoint = platform === 'instagram' ? '/api/instagram/auth' : '/api/youtube/auth';
+            const response = await fetch(`${API_BASE_URL}${endpoint}`);
+            const data = await response.json();
+
+            if (data.url || data.authUrl) {
+                window.location.href = data.url || data.authUrl;
+            } else {
+                console.error(`No auth URL returned for ${platform}`);
+            }
+        } catch (err) {
+            console.error(`Failed to connect ${platform}:`, err);
+        } finally {
+            setConnectingPlatform(null);
+        }
     };
 
     // ==================== FORMAT MESSAGE CONTENT ====================
@@ -219,6 +258,49 @@ function ChatHub() {
                         <span className="sidebar-connected-badge">● Connected</span>
                     </div>
                 )}
+
+                {/* Connections */}
+                <div className="sidebar-section">
+                    <h3 className="sidebar-section-title">Connections</h3>
+
+                    {/* Instagram */}
+                    {connections.instagram ? (
+                        <div className="sidebar-connection connected" id="conn-instagram">
+                            <span className="conn-icon">📸</span>
+                            <span className="conn-name">Instagram</span>
+                            <span className="conn-status connected">● Connected</span>
+                        </div>
+                    ) : (
+                        <button
+                            className="sidebar-connect-btn instagram"
+                            onClick={() => handleConnectPlatform('instagram')}
+                            disabled={connectingPlatform === 'instagram'}
+                            id="connect-instagram"
+                        >
+                            <span className="conn-icon">📸</span>
+                            <span className="conn-name">{connectingPlatform === 'instagram' ? 'Connecting...' : 'Connect Instagram'}</span>
+                        </button>
+                    )}
+
+                    {/* YouTube */}
+                    {connections.youtube ? (
+                        <div className="sidebar-connection connected" id="conn-youtube">
+                            <span className="conn-icon">🎬</span>
+                            <span className="conn-name">YouTube</span>
+                            <span className="conn-status connected">● Connected</span>
+                        </div>
+                    ) : (
+                        <button
+                            className="sidebar-connect-btn youtube"
+                            onClick={() => handleConnectPlatform('youtube')}
+                            disabled={connectingPlatform === 'youtube'}
+                            id="connect-youtube"
+                        >
+                            <span className="conn-icon">🎬</span>
+                            <span className="conn-name">{connectingPlatform === 'youtube' ? 'Connecting...' : 'Connect YouTube'}</span>
+                        </button>
+                    )}
+                </div>
 
                 {/* Quick Actions */}
                 <div className="sidebar-section">
