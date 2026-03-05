@@ -182,76 +182,72 @@ async function sendDirectMessage(igUserId, recipientIGSID, message, accessToken,
 }
 
 async function resolveUserIdMapping(igUserId) {
-    // Direct match - check if settings exist for this ID in DB
-    const hasCommentSettings = await AutoReplySetting.findOne({ userId: igUserId });
-    const hasDmSettings = await DmAutoReplySetting.findOne({ userId: igUserId });
+    // Find the "source" OAuth ID — the one that has a Token stored from login
+    // The webhook ID may differ from the OAuth ID, so we need to find the mapping
 
-    if (hasCommentSettings || hasDmSettings) {
+    // First, check if THIS ID has a token (meaning it IS the OAuth ID)
+    const hasOwnToken = await Token.findOne({ userId: igUserId });
+
+    // Find any OTHER user ID that has settings (the OAuth ID)
+    const otherToken = await Token.findOne({ userId: { $ne: igUserId } });
+    const sourceId = otherToken ? otherToken.userId : null;
+
+    // If this ID has its own token and no other ID exists, it's the OAuth ID itself
+    if (hasOwnToken && !sourceId) {
         return igUserId;
     }
 
-    console.log(`[ID-Mapping] No settings for ${igUserId}, searching stored entries...`);
+    // If there's a source OAuth ID, ALWAYS sync latest settings from it
+    if (sourceId) {
+        console.log(`[ID-Mapping] Syncing latest settings from OAuth ID ${sourceId} -> webhook ID ${igUserId}`);
 
-    // Find any stored user that has settings (different ID)
-    let mappedId = null;
-
-    const commentSetting = await AutoReplySetting.findOne({ userId: { $ne: igUserId } });
-    if (commentSetting) {
-        mappedId = commentSetting.userId;
-    }
-
-    if (!mappedId) {
-        const dmSetting = await DmAutoReplySetting.findOne({ userId: { $ne: igUserId } });
-        if (dmSetting) {
-            mappedId = dmSetting.userId;
-        }
-    }
-
-    if (!mappedId) {
-        const tokenDoc = await Token.findOne({ userId: { $ne: igUserId } });
-        if (tokenDoc) {
-            mappedId = tokenDoc.userId;
-        }
-    }
-
-    if (mappedId) {
-        console.log(`[ID-Mapping] Syncing from stored ID ${mappedId} -> webhook ID ${igUserId}`);
-
-        // Copy token to webhook ID
-        const tokenData = await Token.findOne({ userId: mappedId });
+        // Sync token
+        const tokenData = await Token.findOne({ userId: sourceId });
         if (tokenData) {
             await Token.findOneAndUpdate(
                 { userId: igUserId },
                 { userId: igUserId, accessToken: tokenData.accessToken, expiresIn: tokenData.expiresIn, createdAt: tokenData.createdAt },
                 { upsert: true }
             );
-            console.log(`[ID-Mapping] Token synced to ${igUserId}`);
         }
 
-        // Copy comment auto-reply settings to webhook ID
-        const commentSettings = await AutoReplySetting.findOne({ userId: mappedId });
+        // ALWAYS sync comment auto-reply settings (get latest mode, delay, etc.)
+        const commentSettings = await AutoReplySetting.findOne({ userId: sourceId });
         if (commentSettings) {
             await AutoReplySetting.findOneAndUpdate(
                 { userId: igUserId },
-                { userId: igUserId, enabled: commentSettings.enabled, delaySeconds: commentSettings.delaySeconds, message: commentSettings.message, replyMode: commentSettings.replyMode || 'reply_only' },
+                {
+                    userId: igUserId,
+                    enabled: commentSettings.enabled,
+                    delaySeconds: commentSettings.delaySeconds,
+                    message: commentSettings.message,
+                    replyMode: commentSettings.replyMode || 'reply_only'
+                },
                 { upsert: true }
             );
-            console.log(`[ID-Mapping] Comment auto-reply settings synced to ${igUserId}: enabled=${commentSettings.enabled}`);
+            console.log(`[ID-Mapping] Comment settings synced: enabled=${commentSettings.enabled}, mode=${commentSettings.replyMode}`);
         }
 
-        // Copy DM auto-reply settings to webhook ID
-        const dmSettings = await DmAutoReplySetting.findOne({ userId: mappedId });
+        // ALWAYS sync DM auto-reply settings (critical: includes replyMode!)
+        const dmSettings = await DmAutoReplySetting.findOne({ userId: sourceId });
         if (dmSettings) {
             await DmAutoReplySetting.findOneAndUpdate(
                 { userId: igUserId },
-                { userId: igUserId, enabled: dmSettings.enabled, delaySeconds: dmSettings.delaySeconds, message: dmSettings.message, replyMode: dmSettings.replyMode || 'static', aiPersonality: dmSettings.aiPersonality || '' },
+                {
+                    userId: igUserId,
+                    enabled: dmSettings.enabled,
+                    delaySeconds: dmSettings.delaySeconds,
+                    message: dmSettings.message,
+                    replyMode: dmSettings.replyMode || 'static',
+                    aiPersonality: dmSettings.aiPersonality || ''
+                },
                 { upsert: true }
             );
-            console.log(`[ID-Mapping] DM auto-reply settings synced to ${igUserId}: enabled=${dmSettings.enabled}`);
+            console.log(`[ID-Mapping] DM settings synced: enabled=${dmSettings.enabled}, mode=${dmSettings.replyMode}`);
         }
 
-        // Copy CreatorPersona to webhook ID (for AI-powered replies)
-        const personaData = await CreatorPersona.findOne({ userId: mappedId });
+        // Sync CreatorPersona (for AI-powered replies)
+        const personaData = await CreatorPersona.findOne({ userId: sourceId });
         if (personaData) {
             const personaObj = personaData.toObject();
             delete personaObj._id;
@@ -260,13 +256,13 @@ async function resolveUserIdMapping(igUserId) {
                 { ...personaObj, userId: igUserId },
                 { upsert: true }
             );
-            console.log(`[ID-Mapping] CreatorPersona synced to ${igUserId}`);
         }
 
         return igUserId;
     }
 
-    console.log(`[ID-Mapping] No stored data found to map for ${igUserId}`);
+    // No mapping found — use as-is
+    console.log(`[ID-Mapping] No mapping needed for ${igUserId}`);
     return igUserId;
 }
 

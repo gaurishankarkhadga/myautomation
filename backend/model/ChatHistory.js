@@ -34,9 +34,8 @@ const chatHistorySchema = new mongoose.Schema({
 chatHistorySchema.index({ userId: 1, updatedAt: -1 });
 
 // Auto-update timestamp
-chatHistorySchema.pre('save', function (next) {
+chatHistorySchema.pre('save', function () {
     this.updatedAt = new Date();
-    next();
 });
 
 module.exports = mongoose.model('ChatHistory', chatHistorySchema);
