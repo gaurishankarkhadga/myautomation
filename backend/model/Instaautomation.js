@@ -18,7 +18,8 @@ const autoReplySettingSchema = new mongoose.Schema({
         type: String,
         enum: ['reply_only', 'reply_and_hide', 'ai_smart'],
         default: 'reply_only'
-    }
+    },
+    viralTagEnabled: { type: Boolean, default: false }
 });
 
 // ==================== AUTO-REPLY SETTINGS (DMs) ====================
@@ -34,7 +35,8 @@ const dmAutoReplySettingSchema = new mongoose.Schema({
     },
     aiPersonality: { type: String, default: '' }, // Custom personality override
     storyMentionEnabled: { type: Boolean, default: false },
-    storyMentionMessage: { type: String, default: 'Thank you so much for the mention! ❤️' }
+    storyMentionMessage: { type: String, default: 'Thank you so much for the mention! ❤️' },
+    inboxTriageEnabled: { type: Boolean, default: false }
 });
 
 // ==================== AUTO-REPLY LOG (Comments) ====================

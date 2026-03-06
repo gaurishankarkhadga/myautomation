@@ -28,6 +28,7 @@ function InstagramTest() {
     const [autoReplySaving, setAutoReplySaving] = useState(false);
     const [autoReplyStatus, setAutoReplyStatus] = useState('');
     const [replyMode, setReplyMode] = useState('reply_only');
+    const [viralTagEnabled, setViralTagEnabled] = useState(false);
 
     // DM auto-reply state
     const [dmAutoReplyEnabled, setDmAutoReplyEnabled] = useState(false);
@@ -39,6 +40,7 @@ function InstagramTest() {
     const [dmReplyMode, setDmReplyMode] = useState('static');
     const [storyMentionEnabled, setStoryMentionEnabled] = useState(false);
     const [storyMentionMessage, setStoryMentionMessage] = useState('Thank you so much for the mention! ❤️');
+    const [inboxTriageEnabled, setInboxTriageEnabled] = useState(false);
 
     // Creator assets state
     const [creatorAssets, setCreatorAssets] = useState([]);
@@ -226,6 +228,7 @@ function InstagramTest() {
                 setAutoReplyDelay(data.data.delaySeconds);
                 setAutoReplyMessage(data.data.message);
                 setReplyMode(data.data.replyMode || 'reply_only');
+                setViralTagEnabled(data.data.viralTagEnabled || false);
             }
         } catch (err) {
             console.error('Failed to fetch auto-reply settings:', err);
@@ -245,7 +248,8 @@ function InstagramTest() {
                     enabled: autoReplyEnabled,
                     delaySeconds: autoReplyDelay,
                     message: autoReplyMessage,
-                    replyMode: replyMode
+                    replyMode: replyMode,
+                    viralTagEnabled
                 })
             });
 
@@ -308,6 +312,7 @@ function InstagramTest() {
                 setDmReplyMode(data.data.replyMode || 'static');
                 setStoryMentionEnabled(data.data.storyMentionEnabled || false);
                 setStoryMentionMessage(data.data.storyMentionMessage || 'Thank you so much for the mention! ❤️');
+                setInboxTriageEnabled(data.data.inboxTriageEnabled || false);
             }
         } catch (err) {
             console.error('Failed to fetch DM auto-reply settings:', err);
@@ -329,7 +334,8 @@ function InstagramTest() {
                     message: dmAutoReplyMessage,
                     replyMode: dmReplyMode,
                     storyMentionEnabled,
-                    storyMentionMessage
+                    storyMentionMessage,
+                    inboxTriageEnabled
                 })
             });
 
@@ -835,6 +841,31 @@ function InstagramTest() {
                                         </label>
                                     </div>
                                 )}
+
+                                <div className="dm-divider"></div>
+
+                                <h3>📥 Inbox Zero AI Triage</h3>
+                                <p className="mode-info">Automatically categorize DMs with priority tags (Collab, Fan Mail, etc.) using Gemini AI.</p>
+                                <div className="setting-row">
+                                    <label className="toggle-label">
+                                        <span>Enable AI Triage</span>
+                                        <div className={`toggle-switch ${inboxTriageEnabled ? 'on' : ''}`} onClick={() => setInboxTriageEnabled(!inboxTriageEnabled)}>
+                                            <div className="toggle-knob"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div className="dm-divider"></div>
+
+                                <h3>🚀 Viral Tag Auto-Reply (AI)</h3>
+                                <p className="mode-info">Automatically reply 24h later to users who tag you in a viral comment section to engage fans naturally.</p>
+                                <div className="setting-row">
+                                    <label className="toggle-label">
+                                        <span>Enable Viral Tag Replies</span>
+                                        <div className={`toggle-switch ${viralTagEnabled ? 'on' : ''}`} onClick={() => setViralTagEnabled(!viralTagEnabled)}>
+                                            <div className="toggle-knob"></div>
+                                        </div>
+                                    </label>
+                                </div>
 
                                 <div className="setting-actions">
                                     <button onClick={saveDmAutoReplySettings} disabled={dmAutoReplySaving} className="btn-save">

@@ -48,11 +48,17 @@ module.exports = {
                 let activeCount = 0;
                 if (commentSettings?.enabled) activeCount++;
                 if (dmSettings?.enabled) activeCount++;
+                if (commentSettings?.viralTagEnabled) activeCount++;
+                if (dmSettings?.inboxTriageEnabled) activeCount++;
+                if (dmSettings?.storyMentionEnabled) activeCount++;
 
                 const sections = [
                     `📊 **Your Automation Dashboard** (${activeCount} active)\n`,
                     `💬 **Comment Auto-Reply:** ${commentSettings?.enabled ? `✅ ON (${modeLabels[commentSettings.replyMode] || commentSettings.replyMode}, ${commentSettings.delaySeconds}s delay)` : '❌ OFF'}`,
                     `✉️ **DM Auto-Reply:** ${dmSettings?.enabled ? `✅ ON (AI-Powered, ${dmSettings.delaySeconds}s delay)` : '❌ OFF'}`,
+                    `🚀 **Viral Tag Auto-Reply:** ${commentSettings?.viralTagEnabled ? '✅ ON (AI scheduled for 24h later)' : '❌ OFF'}`,
+                    `📥 **Inbox AI Triage:** ${dmSettings?.inboxTriageEnabled ? '✅ ON (Automatic categorization via Gemini)' : '❌ OFF'}`,
+                    `📸 **Story Mentions:** ${dmSettings?.storyMentionEnabled ? '✅ ON (Auto-sending thank yous)' : '❌ OFF'}`,
                     `🤖 **AI Persona:** ${persona?.communicationStyle ? `✅ Analyzed (${persona.communicationStyle})` : '❌ Not analyzed yet'}`,
                     `📦 **Active Assets:** ${assets} items`,
                     `📋 **Comment Replies Sent:** ${recentCommentLogs}`,

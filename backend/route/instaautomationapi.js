@@ -927,10 +927,20 @@ router.post('/webhook', async (req, res) => {
 
                         // Check for viral tag (@mention of the user's username)
                         if (commentData.text.includes('@')) {
-                            // trigger viral tag logic in background
-                            viralTagService.handleMention(igUserId, commentData).catch(err => {
-                                console.error('[Webhook] ViralTag handle error:', err.message);
-                            });
+                            try {
+                                const igUserIdMapped = await resolveUserIdMapping(igUserId);
+                                const autoSettings = await AutoReplySetting.findOne({ userId: igUserIdMapped });
+                                if (autoSettings && autoSettings.viralTagEnabled) {
+                                    // trigger viral tag logic in background
+                                    viralTagService.handleMention(igUserId, commentData).catch(err => {
+                                        console.error('[Webhook] ViralTag handle error:', err.message);
+                                    });
+                                } else {
+                                    console.log('[Webhook] Viral tag replies disabled for user, skipping.');
+                                }
+                            } catch (err) {
+                                console.error('[Webhook] Failed to query user settings for viral tag:', err.message);
+                            }
                         }
 
                         // Trigger auto-reply if enabled
@@ -970,8 +980,17 @@ router.post('/webhook', async (req, res) => {
                         await Message.create(messageData);
 
                         // Triage the message to determine priority
-                        const priorityTag = await inboxTriageService.triageMessage(messageData.text);
-                        console.log(`[Webhook] Inbox Triage tagged as: ${priorityTag}`);
+                        let priorityTag = 'Untriaged';
+                        try {
+                            const igUserIdMapped = await resolveUserIdMapping(igUserId);
+                            const dmSettings = await DmAutoReplySetting.findOne({ userId: igUserIdMapped });
+                            if (dmSettings && dmSettings.inboxTriageEnabled) {
+                                priorityTag = await inboxTriageService.triageMessage(messageData.text);
+                                console.log(`[Webhook] Inbox Triage tagged as: ${priorityTag}`);
+                            }
+                        } catch (err) {
+                            console.error('[Webhook] Failed to query user settings for triage:', err.message);
+                        }
 
                         // Update conversation in DB
                         const conversationId = `${senderId}_${recipientId}`;
@@ -1213,7 +1232,7 @@ router.delete('/messages/clear', async (req, res) => {
 router.post('/auto-reply/settings', async (req, res) => {
     try {
         const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
-        const { userId, enabled, delaySeconds, message, replyMode } = req.body;
+        const { userId, enabled, delaySeconds, message, replyMode, viralTagEnabled } = req.body;
 
         if (!token || !userId) {
             return res.status(400).json({
@@ -1237,7 +1256,8 @@ router.post('/auto-reply/settings', async (req, res) => {
                 enabled: Boolean(enabled),
                 delaySeconds: delay,
                 message: message ? message.trim() : '',
-                replyMode: mode
+                replyMode: mode,
+                viralTagEnabled: Boolean(viralTagEnabled)
             },
             { upsert: true, new: true }
         );
@@ -1385,7 +1405,7 @@ router.delete('/auto-reply/log', async (req, res) => {
 router.post('/dm-auto-reply/settings', async (req, res) => {
     try {
         const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
-        const { userId, enabled, delaySeconds, message, replyMode, aiPersonality, storyMentionEnabled, storyMentionMessage } = req.body;
+        const { userId, enabled, delaySeconds, message, replyMode, aiPersonality, storyMentionEnabled, storyMentionMessage, inboxTriageEnabled } = req.body;
 
         if (!token || !userId) {
             return res.status(400).json({
@@ -1409,7 +1429,8 @@ router.post('/dm-auto-reply/settings', async (req, res) => {
                 replyMode: replyMode || 'static',
                 aiPersonality: aiPersonality ? aiPersonality.trim() : '',
                 storyMentionEnabled: Boolean(storyMentionEnabled),
-                storyMentionMessage: storyMentionMessage ? storyMentionMessage.trim() : 'Thank you so much for the mention! ❤️'
+                storyMentionMessage: storyMentionMessage ? storyMentionMessage.trim() : 'Thank you so much for the mention! ❤️',
+                inboxTriageEnabled: Boolean(inboxTriageEnabled)
             },
             { upsert: true, new: true }
         );
