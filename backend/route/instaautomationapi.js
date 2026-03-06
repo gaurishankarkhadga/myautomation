@@ -1027,7 +1027,7 @@ router.post('/webhook', async (req, res) => {
                         const igUserIdMapped = await resolveUserIdMapping(igUserId);
                         const dmSettings = await DmAutoReplySetting.findOne({ userId: igUserIdMapped });
 
-                        if (dmSettings && dmSettings.enabled) {
+                        if (dmSettings && dmSettings.storyMentionEnabled) {
                             // You can add a new field to DmAutoReplySetting for custom story mention messages
                             const thankYouMessage = dmSettings.storyMentionMessage || "Thank you so much for the mention! ❤️";
                             console.log(`[Webhook] Auto-replying to story mention: "${thankYouMessage}"`);
@@ -1036,7 +1036,7 @@ router.post('/webhook', async (req, res) => {
                                 await sendDirectMessage(igUserId, senderId, thankYouMessage, tokenData.accessToken);
                             }
                         } else {
-                            console.log('[Webhook] DM Auto-reply is disabled, skipping story mention reply');
+                            console.log('[Webhook] Story Mention Auto-reply is disabled, skipping story mention reply');
                         }
                     }
 

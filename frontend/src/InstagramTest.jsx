@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import InstaProfile from './components/InstaProfile';
 import BrandDeals from './components/BrandDeals';
+import ToastNotification, { useToasts } from './components/ToastNotification';
 import './InstagramTest.css';
 
 
@@ -19,6 +20,8 @@ function InstagramTest() {
     const [loadingInsta, setLoadingInsta] = useState(false);
     const [loadingYT, setLoadingYT] = useState(false);
     const [error, setError] = useState('');
+
+    const { toasts, addToast, removeToast } = useToasts();
 
     // Comment auto-reply state
     const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
@@ -196,7 +199,6 @@ function InstagramTest() {
     const subscribeWebhooks = async () => {
         try {
             setWebhookLoading(true);
-            setWebhookStatus('');
 
             const response = await fetch(`${API_BASE_URL}/api/instagram/subscribe-webhooks?token=${token}`, {
                 method: 'POST'
@@ -204,15 +206,14 @@ function InstagramTest() {
             const data = await response.json();
 
             if (data.success) {
-                setWebhookStatus('Webhooks subscribed successfully! Comments & DM events will now be received.');
+                addToast({ type: 'success', title: 'Success', message: 'Webhooks subscribed successfully! Comments & DM events will now be received.' });
             } else {
-                setWebhookStatus(`Error: ${data.error || data.message}`);
+                addToast({ type: 'error', title: 'Error', message: data.error || data.message });
             }
         } catch (err) {
-            setWebhookStatus(`Error: ${err.message}`);
+            addToast({ type: 'error', title: 'Error', message: err.message });
         } finally {
             setWebhookLoading(false);
-            setTimeout(() => setWebhookStatus(''), 5000);
         }
     };
 
@@ -238,7 +239,6 @@ function InstagramTest() {
     const saveAutoReplySettings = async () => {
         try {
             setAutoReplySaving(true);
-            setAutoReplyStatus('');
 
             const response = await fetch(`${API_BASE_URL}/api/instagram/auto-reply/settings?token=${token}`, {
                 method: 'POST',
@@ -256,13 +256,12 @@ function InstagramTest() {
             const data = await response.json();
 
             if (data.success) {
-                setAutoReplyStatus('Settings saved successfully!');
-                setTimeout(() => setAutoReplyStatus(''), 3000);
+                addToast({ type: 'success', title: 'Saved', message: 'Settings saved successfully!' });
             } else {
-                setAutoReplyStatus(`Error: ${data.error}`);
+                addToast({ type: 'error', title: 'Error', message: data.error });
             }
         } catch (err) {
-            setAutoReplyStatus(`Error: ${err.message}`);
+            addToast({ type: 'error', title: 'Error', message: err.message });
         } finally {
             setAutoReplySaving(false);
         }
@@ -290,8 +289,7 @@ function InstagramTest() {
 
             if (data.success) {
                 setAutoReplyLog([]);
-                setAutoReplyStatus('Log cleared');
-                setTimeout(() => setAutoReplyStatus(''), 2000);
+                addToast({ type: 'info', title: 'Cleared', message: 'Log cleared' });
             }
         } catch (err) {
             console.error('Failed to clear log:', err);
@@ -322,7 +320,6 @@ function InstagramTest() {
     const saveDmAutoReplySettings = async () => {
         try {
             setDmAutoReplySaving(true);
-            setDmAutoReplyStatus('');
 
             const response = await fetch(`${API_BASE_URL}/api/instagram/dm-auto-reply/settings?token=${token}`, {
                 method: 'POST',
@@ -342,13 +339,12 @@ function InstagramTest() {
             const data = await response.json();
 
             if (data.success) {
-                setDmAutoReplyStatus('DM auto-reply settings saved!');
-                setTimeout(() => setDmAutoReplyStatus(''), 3000);
+                addToast({ type: 'success', title: 'Saved', message: 'DM auto-reply settings saved!' });
             } else {
-                setDmAutoReplyStatus(`Error: ${data.error}`);
+                addToast({ type: 'error', title: 'Error', message: data.error });
             }
         } catch (err) {
-            setDmAutoReplyStatus(`Error: ${err.message}`);
+            addToast({ type: 'error', title: 'Error', message: err.message });
         } finally {
             setDmAutoReplySaving(false);
         }
@@ -376,8 +372,7 @@ function InstagramTest() {
 
             if (data.success) {
                 setDmAutoReplyLog([]);
-                setDmAutoReplyStatus('DM log cleared');
-                setTimeout(() => setDmAutoReplyStatus(''), 2000);
+                addToast({ type: 'info', title: 'Cleared', message: 'DM log cleared' });
             }
         } catch (err) {
             console.error('Failed to clear DM log:', err);
@@ -503,6 +498,7 @@ function InstagramTest() {
 
     return (
         <div className="instagram-test">
+            <ToastNotification toasts={toasts} onRemove={removeToast} />
             <div className="container">
                 <h1>Instagram Graph API Test</h1>
 
@@ -571,11 +567,6 @@ function InstagramTest() {
                                 >
                                     {webhookLoading ? 'Subscribing...' : '🔔 Subscribe to Webhooks'}
                                 </button>
-                                {webhookStatus && (
-                                    <span className={`webhook-status ${webhookStatus.includes('Error') ? 'status-error' : 'status-success'}`}>
-                                        {webhookStatus}
-                                    </span>
-                                )}
                             </div>
                         </div>
 
@@ -684,6 +675,19 @@ function InstagramTest() {
                                     </label>
                                 </div>
 
+                                <div className="dm-divider"></div>
+
+                                <h3>🚀 Viral Tag Auto-Reply (AI)</h3>
+                                <p className="mode-info">Automatically reply 24h later to users who tag you in a viral comment section to engage fans naturally.</p>
+                                <div className="setting-row">
+                                    <label className="toggle-label">
+                                        <span>Enable Viral Tag Replies</span>
+                                        <div className={`toggle-switch ${viralTagEnabled ? 'on' : ''}`} onClick={() => setViralTagEnabled(!viralTagEnabled)}>
+                                            <div className="toggle-knob"></div>
+                                        </div>
+                                    </label>
+                                </div>
+
                                 <div className="setting-actions">
                                     <button
                                         onClick={saveAutoReplySettings}
@@ -692,11 +696,6 @@ function InstagramTest() {
                                     >
                                         {autoReplySaving ? 'Saving...' : '💾 Save Settings'}
                                     </button>
-                                    {autoReplyStatus && (
-                                        <span className={`save-status ${autoReplyStatus.includes('Error') ? 'status-error' : 'status-success'}`}>
-                                            {autoReplyStatus}
-                                        </span>
-                                    )}
                                 </div>
                             </div>
 
@@ -854,28 +853,11 @@ function InstagramTest() {
                                         </div>
                                     </label>
                                 </div>
-                                <div className="dm-divider"></div>
-
-                                <h3>🚀 Viral Tag Auto-Reply (AI)</h3>
-                                <p className="mode-info">Automatically reply 24h later to users who tag you in a viral comment section to engage fans naturally.</p>
-                                <div className="setting-row">
-                                    <label className="toggle-label">
-                                        <span>Enable Viral Tag Replies</span>
-                                        <div className={`toggle-switch ${viralTagEnabled ? 'on' : ''}`} onClick={() => setViralTagEnabled(!viralTagEnabled)}>
-                                            <div className="toggle-knob"></div>
-                                        </div>
-                                    </label>
-                                </div>
 
                                 <div className="setting-actions">
                                     <button onClick={saveDmAutoReplySettings} disabled={dmAutoReplySaving} className="btn-save">
                                         {dmAutoReplySaving ? 'Saving...' : '💾 Save DM Settings'}
                                     </button>
-                                    {dmAutoReplyStatus && (
-                                        <span className={`save-status ${dmAutoReplyStatus.includes('Error') ? 'status-error' : 'status-success'}`}>
-                                            {dmAutoReplyStatus}
-                                        </span>
-                                    )}
                                 </div>
                             </div>
 
@@ -1076,7 +1058,7 @@ function InstagramTest() {
                     <p>&copy; {new Date().getFullYear()} CreatorHub. All rights reserved.</p>
                 </div>
             </footer>
-        </div>
+        </div >
     );
 }
 
