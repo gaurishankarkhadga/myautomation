@@ -60,6 +60,17 @@ module.exports = {
                     `🤝 **Brand Deals:** ${brandDeal ? `${brandDeal.brandDeals?.length || 0} discovered` : 'Not searched yet'}`
                 ];
 
+                // Fetch conversation priority tags
+                const conversations = await require('../../model/Instaautomation').Conversation.find({ senderId: { $ne: userId } }).lean();
+                const priorityCounts = { 'Collaboration': 0, 'Support': 0, 'Fan Mail': 0, 'Spam': 0, 'Other': 0 };
+                conversations.forEach(c => {
+                    if (priorityCounts[c.priorityTag] !== undefined) priorityCounts[c.priorityTag]++;
+                    else priorityCounts['Other']++;
+                });
+
+                sections.push('\n**📥 Inbox Triage Summary:**');
+                sections.push(`🤝 Collab: ${priorityCounts['Collaboration']} | 🛠️ Support: ${priorityCounts['Support']} | ❤️ Fan: ${priorityCounts['Fan Mail']} | 🚫 Spam: ${priorityCounts['Spam']} | 🤷 Other: ${priorityCounts['Other']}`);
+
                 // Add preferences info if set
                 if (prefs) {
                     sections.push('\n**⚙️ Preferences:**');
@@ -89,7 +100,8 @@ module.exports = {
                         personaAnalyzed: !!persona?.communicationStyle,
                         activeAssets: assets,
                         totalCommentReplies: recentCommentLogs,
-                        totalDmReplies: recentDmLogs
+                        totalDmReplies: recentDmLogs,
+                        inboxTriage: priorityCounts
                     }
                 };
             }

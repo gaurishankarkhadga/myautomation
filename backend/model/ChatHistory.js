@@ -27,6 +27,11 @@ const chatMessageSchema = new mongoose.Schema({
 const chatHistorySchema = new mongoose.Schema({
     userId: { type: String, required: true, index: true },
     messages: [chatMessageSchema],
+    priorityTag: {
+        type: String,
+        enum: ['Collaboration', 'Support', 'Fan Mail', 'Spam', 'Other', 'Untriaged'],
+        default: 'Untriaged'
+    },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
 });

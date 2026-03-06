@@ -17,6 +17,8 @@ const {
 const CreatorPersona = require('../model/CreatorPersona');
 const aiService = require('../service/aiService');
 const brandDealService = require('../service/brandDealService');
+const inboxTriageService = require('../service/inboxTriageService');
+const viralTagService = require('../service/viralTagService');
 const CreatorAsset = require('../model/CreatorAsset');
 
 // Instagram Graph API Configuration
@@ -923,6 +925,14 @@ router.post('/webhook', async (req, res) => {
 
                         console.log(`[Webhook] Comment from @${commentData.username}: "${commentData.text}"`);
 
+                        // Check for viral tag (@mention of the user's username)
+                        if (commentData.text.includes('@')) {
+                            // trigger viral tag logic in background
+                            viralTagService.handleMention(igUserId, commentData).catch(err => {
+                                console.error('[Webhook] ViralTag handle error:', err.message);
+                            });
+                        }
+
                         // Trigger auto-reply if enabled
                         await scheduleAutoReply(commentData, igUserId);
                     }
@@ -959,6 +969,10 @@ router.post('/webhook', async (req, res) => {
                         // Store message in DB
                         await Message.create(messageData);
 
+                        // Triage the message to determine priority
+                        const priorityTag = await inboxTriageService.triageMessage(messageData.text);
+                        console.log(`[Webhook] Inbox Triage tagged as: ${priorityTag}`);
+
                         // Update conversation in DB
                         const conversationId = `${senderId}_${recipientId}`;
                         const existingConv = await Conversation.findOne({ conversationId });
@@ -972,15 +986,39 @@ router.post('/webhook', async (req, res) => {
                                 recipientId,
                                 lastMessage: messageData,
                                 lastMessageTime: event.timestamp,
-                                unreadCount: currentUnread + 1
+                                unreadCount: currentUnread + 1,
+                                priorityTag // store the latest triage result on the conversation
                             },
                             { upsert: true, new: true }
                         );
+
+                        // If you also want to update ChatHistory directly here, you could find the ChatHistory doc and push a message with the tag
 
                         console.log('[Webhook] Message stored in DB');
 
                         // Trigger DM auto-reply
                         await scheduleDMAutoReply(messageData, igUserId);
+                    }
+
+                    // Handle story mention event
+                    if (event.story_mention) {
+                        console.log('[Webhook] Story mention received from:', senderId);
+
+                        // Check if story mention feature is enabled
+                        const igUserIdMapped = await resolveUserIdMapping(igUserId);
+                        const dmSettings = await DmAutoReplySetting.findOne({ userId: igUserIdMapped });
+
+                        if (dmSettings && dmSettings.enabled) {
+                            // You can add a new field to DmAutoReplySetting for custom story mention messages
+                            const thankYouMessage = dmSettings.storyMentionMessage || "Thank you so much for the mention! ❤️";
+                            console.log(`[Webhook] Auto-replying to story mention: "${thankYouMessage}"`);
+                            const tokenData = await Token.findOne({ userId: igUserIdMapped });
+                            if (tokenData) {
+                                await sendDirectMessage(igUserId, senderId, thankYouMessage, tokenData.accessToken);
+                            }
+                        } else {
+                            console.log('[Webhook] DM Auto-reply is disabled, skipping story mention reply');
+                        }
                     }
 
                     // Handle reaction event
@@ -1347,7 +1385,7 @@ router.delete('/auto-reply/log', async (req, res) => {
 router.post('/dm-auto-reply/settings', async (req, res) => {
     try {
         const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
-        const { userId, enabled, delaySeconds, message, replyMode, aiPersonality } = req.body;
+        const { userId, enabled, delaySeconds, message, replyMode, aiPersonality, storyMentionEnabled, storyMentionMessage } = req.body;
 
         if (!token || !userId) {
             return res.status(400).json({
@@ -1369,7 +1407,9 @@ router.post('/dm-auto-reply/settings', async (req, res) => {
                 delaySeconds: delay,
                 message: message ? message.trim() : '',
                 replyMode: replyMode || 'static',
-                aiPersonality: aiPersonality ? aiPersonality.trim() : ''
+                aiPersonality: aiPersonality ? aiPersonality.trim() : '',
+                storyMentionEnabled: Boolean(storyMentionEnabled),
+                storyMentionMessage: storyMentionMessage ? storyMentionMessage.trim() : 'Thank you so much for the mention! ❤️'
             },
             { upsert: true, new: true }
         );

@@ -37,6 +37,8 @@ function InstagramTest() {
     const [dmAutoReplySaving, setDmAutoReplySaving] = useState(false);
     const [dmAutoReplyStatus, setDmAutoReplyStatus] = useState('');
     const [dmReplyMode, setDmReplyMode] = useState('static');
+    const [storyMentionEnabled, setStoryMentionEnabled] = useState(false);
+    const [storyMentionMessage, setStoryMentionMessage] = useState('Thank you so much for the mention! ❤️');
 
     // Creator assets state
     const [creatorAssets, setCreatorAssets] = useState([]);
@@ -304,6 +306,8 @@ function InstagramTest() {
                 setDmAutoReplyDelay(data.data.delaySeconds);
                 setDmAutoReplyMessage(data.data.message);
                 setDmReplyMode(data.data.replyMode || 'static');
+                setStoryMentionEnabled(data.data.storyMentionEnabled || false);
+                setStoryMentionMessage(data.data.storyMentionMessage || 'Thank you so much for the mention! ❤️');
             }
         } catch (err) {
             console.error('Failed to fetch DM auto-reply settings:', err);
@@ -323,7 +327,9 @@ function InstagramTest() {
                     enabled: dmAutoReplyEnabled,
                     delaySeconds: dmAutoReplyDelay,
                     message: dmAutoReplyMessage,
-                    replyMode: dmReplyMode
+                    replyMode: dmReplyMode,
+                    storyMentionEnabled,
+                    storyMentionMessage
                 })
             });
 
@@ -804,6 +810,28 @@ function InstagramTest() {
                                             <span>DM Reply Message</span>
                                             <textarea value={dmAutoReplyMessage} onChange={(e) => setDmAutoReplyMessage(e.target.value)} placeholder="Your static reply message..." rows={3} maxLength={1000} className="reply-textarea" />
                                             <span className="char-count">{dmAutoReplyMessage.length}/1000</span>
+                                        </label>
+                                    </div>
+                                )}
+
+                                <div className="dm-divider"></div>
+
+                                <h3>📸 Story Mentions</h3>
+                                <p className="mode-info">Automatically send a short thank-you message when someone mentions you in their story.</p>
+                                <div className="setting-row">
+                                    <label className="toggle-label">
+                                        <span>Log Story Mentions & Auto-Reply</span>
+                                        <div className={`toggle-switch ${storyMentionEnabled ? 'on' : ''}`} onClick={() => setStoryMentionEnabled(!storyMentionEnabled)}>
+                                            <div className="toggle-knob"></div>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                {storyMentionEnabled && (
+                                    <div className="setting-row">
+                                        <label>
+                                            <span>Story Mention Reply Message</span>
+                                            <input type="text" value={storyMentionMessage} onChange={(e) => setStoryMentionMessage(e.target.value)} placeholder="Thank you so much for the mention! ❤️" maxLength={200} className="reply-input" />
                                         </label>
                                     </div>
                                 )}

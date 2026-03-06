@@ -32,7 +32,9 @@ const dmAutoReplySettingSchema = new mongoose.Schema({
         enum: ['static', 'ai_smart', 'ai_with_assets'],
         default: 'static'
     },
-    aiPersonality: { type: String, default: '' } // Custom personality override
+    aiPersonality: { type: String, default: '' }, // Custom personality override
+    storyMentionEnabled: { type: Boolean, default: false },
+    storyMentionMessage: { type: String, default: 'Thank you so much for the mention! ❤️' }
 });
 
 // ==================== AUTO-REPLY LOG (Comments) ====================
@@ -94,18 +96,26 @@ const conversationSchema = new mongoose.Schema({
     recipientId: { type: String, required: true },
     lastMessage: { type: Object },
     lastMessageTime: { type: Number },
-    unreadCount: { type: Number, default: 0 }
+    unreadCount: { type: Number, default: 0 },
+    priorityTag: { type: String, enum: ['Collaboration', 'Support', 'Fan Mail', 'Spam', 'Other', 'Untriaged'], default: 'Untriaged' }
 });
 
-// ==================== WEBHOOK EVENT LOG (Debug) ====================
+// ==================== WEBHOOK EVENT LOG (Debug & Queue) ====================
 const webhookEventSchema = new mongoose.Schema({
     receivedAt: { type: Date, default: Date.now },
     object: { type: String },
     entryCount: { type: Number },
-    raw: { type: String }
+    raw: { type: String },
+    // Custom Fields for queued tasks
+    userId: { type: String },
+    eventType: { type: String },
+    processed: { type: Boolean, default: false },
+    payload: { type: Object },
+    scheduledAt: { type: Date }
 });
 
 webhookEventSchema.index({ receivedAt: -1 });
+webhookEventSchema.index({ eventType: 1, processed: 1, scheduledAt: 1 });
 
 // ==================== EXPORT MODELS ====================
 const Token = mongoose.model('Token', tokenSchema);

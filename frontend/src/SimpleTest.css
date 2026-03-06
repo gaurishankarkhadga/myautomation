@@ -4,8 +4,7 @@
     justify-content: center;
     align-items: center;
     padding: 2rem;
-    background-color: #333;
-    
+    background-color: #333;   
 }
 
 .test-card {
@@ -269,3 +268,5 @@
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     }
 }
+
+

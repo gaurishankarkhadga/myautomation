@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
+import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 // ==================== TOAST NOTIFICATION COMPONENT ====================
-// Reusable toast system: success (green), warning (yellow), error (red), info (blue)
-// Auto-dismiss after 5s, stackable, animated slide-in/out
+// Premium glassmorphism toast: success, warning, error, info
+// Auto-dismiss after 4s, stackable, smooth slide-in/out
 
 function ToastNotification({ toasts, onRemove }) {
+    if (!toasts || toasts.length === 0) return null;
+
     return (
         <div className="toast-container" id="toast-container">
             {toasts.map((toast) => (
@@ -20,39 +23,43 @@ function ToastItem({ toast, onRemove }) {
     useEffect(() => {
         const timer = setTimeout(() => {
             setIsExiting(true);
-            setTimeout(() => onRemove(toast.id), 400);
-        }, toast.duration || 5000);
+            setTimeout(() => onRemove(toast.id), 350);
+        }, toast.duration || 4000);
 
         return () => clearTimeout(timer);
     }, [toast.id, toast.duration, onRemove]);
 
     const handleClose = () => {
         setIsExiting(true);
-        setTimeout(() => onRemove(toast.id), 400);
+        setTimeout(() => onRemove(toast.id), 350);
     };
 
-    const icons = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
+    const iconMap = {
+        success: <CheckCircle size={18} strokeWidth={2} />,
+        error: <XCircle size={18} strokeWidth={2} />,
+        warning: <AlertTriangle size={18} strokeWidth={2} />,
+        info: <Info size={18} strokeWidth={2} />
     };
+
+    const type = toast.type || 'info';
 
     return (
-        <div className={`toast-item toast-${toast.type} ${isExiting ? 'toast-exit' : 'toast-enter'}`}>
-            <div className="toast-icon">{icons[toast.type] || '📋'}</div>
-            <div className="toast-content">
-                <div className="toast-title">{toast.title}</div>
-                <div className="toast-message">{toast.message}</div>
+        <div className={`toast-item toast-${type} ${isExiting ? 'toast-exit' : 'toast-enter'}`}>
+            <div className={`toast-icon-wrap toast-icon-${type}`}>
+                {iconMap[type] || iconMap.info}
             </div>
-            <button className="toast-close" onClick={handleClose}>×</button>
+            <div className="toast-body">
+                {toast.title && <span className="toast-title">{toast.title}</span>}
+                {toast.message && <span className="toast-msg">{toast.message}</span>}
+            </div>
+            <button className="toast-dismiss" onClick={handleClose} aria-label="Dismiss">
+                <X size={14} strokeWidth={2.5} />
+            </button>
         </div>
     );
 }
 
 // ==================== TOAST HOOK ====================
-// Custom hook for managing toast state
-
 export function useToasts() {
     const [toasts, setToasts] = useState([]);
 

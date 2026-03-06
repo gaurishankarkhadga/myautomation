@@ -93,6 +93,59 @@ app.use((req, res) => {
   });
 });
 
+// ==================== CRON JOBS ====================
+const cron = require('node-cron');
+const { WebhookEvent, Token } = require('./model/Instaautomation');
+const axios = require('axios');
+
+cron.schedule('*/5 * * * *', async () => {
+  console.log('[Cron] Checking for scheduled viral tag replies...');
+  try {
+    const pendingEvents = await WebhookEvent.find({
+      eventType: 'viral_tag_scheduled_reply',
+      processed: false,
+      scheduledAt: { $lte: new Date() }
+    });
+
+    if (pendingEvents.length === 0) return;
+
+    console.log(`[Cron] Found ${pendingEvents.length} pending viral tag replies.`);
+
+    for (const event of pendingEvents) {
+      try {
+        const tokenData = await Token.findOne({ userId: event.userId });
+        if (!tokenData) {
+          console.error(`[Cron] No token for user ${event.userId}`);
+          event.processed = true;
+          await event.save();
+          continue;
+        }
+
+        // Send the comment
+        const { mediaId, message } = event.payload;
+        await axios.post(
+          `https://graph.instagram.com/v24.0/${mediaId}/comments`,
+          { message },
+          {
+            params: { access_token: tokenData.accessToken }
+          }
+        );
+
+        console.log(`[Cron] Successfully posted viral tag reply to media ${mediaId}`);
+        event.processed = true;
+        await event.save();
+      } catch (err) {
+        console.error(`[Cron] Error processing event ${event._id}:`, err.response?.data || err.message);
+        // Mark as processed anyway so we don't infinitely retry failed ones immediately
+        event.processed = true;
+        await event.save();
+      }
+    }
+  } catch (err) {
+    console.error('[Cron] Job error:', err.message);
+  }
+});
+
 // ==================== START SERVER ====================
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
