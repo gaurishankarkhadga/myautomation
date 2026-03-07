@@ -119,6 +119,13 @@ const webhookEventSchema = new mongoose.Schema({
 webhookEventSchema.index({ receivedAt: -1 });
 webhookEventSchema.index({ eventType: 1, processed: 1, scheduledAt: 1 });
 
+// ==================== GLOBAL API USAGE SCHEMA ====================
+const apiUsageSchema = new mongoose.Schema({
+    dateString: { type: String, required: true, unique: true }, // e.g. "2026-03-07"
+    geminiCalls: { type: Number, default: 0 },
+    lastUpdated: { type: Date, default: Date.now }
+});
+
 // ==================== EXPORT MODELS ====================
 const Token = mongoose.model('Token', tokenSchema);
 const AutoReplySetting = mongoose.model('AutoReplySetting', autoReplySettingSchema);
@@ -128,6 +135,7 @@ const DmAutoReplyLog = mongoose.model('DmAutoReplyLog', dmAutoReplyLogSchema);
 const Message = mongoose.model('Message', messageSchema);
 const Conversation = mongoose.model('Conversation', conversationSchema);
 const WebhookEvent = mongoose.model('WebhookEvent', webhookEventSchema);
+const ApiUsage = mongoose.model('ApiUsage', apiUsageSchema);
 
 module.exports = {
     Token,
@@ -137,5 +145,6 @@ module.exports = {
     DmAutoReplyLog,
     Message,
     Conversation,
-    WebhookEvent
+    WebhookEvent,
+    ApiUsage
 };

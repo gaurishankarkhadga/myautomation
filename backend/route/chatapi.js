@@ -101,4 +101,16 @@ router.get('/active-count/:userId', async (req, res) => {
     }
 });
 
+// GET /api/chat/quota — Get Gemini API usage
+router.get('/quota', async (req, res) => {
+    try {
+        const { getGeminiUsage } = require('../service/quotaService');
+        const used = await getGeminiUsage();
+        const limit = 1500; // Free tier daily limit (gemini-1.5-flash / gemini-2.5-flash)
+        res.json({ success: true, used, limit, remaining: Math.max(0, limit - used) });
+    } catch (error) {
+        res.json({ success: true, used: 0, limit: 1500, remaining: 1500 });
+    }
+});
+
 module.exports = router;

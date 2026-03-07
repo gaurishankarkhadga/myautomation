@@ -7,6 +7,13 @@ const axios = require('axios');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+const { incrementGeminiUsage } = require('./quotaService');
+const originalGenerateContent = model.generateContent.bind(model);
+model.generateContent = async function (params) {
+    await incrementGeminiUsage();
+    return await originalGenerateContent(params);
+};
+
 // Instagram Graph API base URL
 const GRAPH_BASE = `${process.env.INSTAGRAM_GRAPH_API_BASE_URL || 'https://graph.instagram.com'}/v${process.env.INSTAGRAM_GRAPH_API_VERSION || '24.0'}`;
 

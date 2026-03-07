@@ -6,6 +6,13 @@ const { WebhookEvent, Token } = require('../model/Instaautomation');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
+const { incrementGeminiUsage } = require('./quotaService');
+const originalGenerateContent = aiModel.generateContent.bind(aiModel);
+aiModel.generateContent = async function (params) {
+    await incrementGeminiUsage();
+    return await originalGenerateContent(params);
+};
+
 const INSTAGRAM_CONFIG = {
     graphBaseUrl: `${process.env.INSTAGRAM_GRAPH_API_BASE_URL || 'https://graph.instagram.com'}/v${process.env.INSTAGRAM_GRAPH_API_VERSION || '24.0'}`
 };
@@ -24,6 +31,33 @@ async function handleMention(userId, commentData) {
     if (recentlyAnalyzedMedia.has(mediaId)) {
         console.log(`[ViralTag] Media ${mediaId} already analyzed recently, skipping...`);
         return;
+    }
+
+    try {
+        // DB-level safeguard 1: Have we already scheduled a reply for this exact media?
+        const existingForMedia = await WebhookEvent.findOne({
+            userId,
+            eventType: 'viral_tag_scheduled_reply',
+            'payload.mediaId': mediaId
+        });
+        if (existingForMedia) {
+            console.log(`[ViralTag] Already scheduled a reply for media ${mediaId}. DB safeguard triggered. Skipping.`);
+            return;
+        }
+
+        // DB-level safeguard 2: Have we scheduled ANY viral reply for this user in the last 24 hours?
+        // This prevents the bot from spamming viral tags across multiple posts in a single day.
+        const recentForUser = await WebhookEvent.findOne({
+            userId,
+            eventType: 'viral_tag_scheduled_reply',
+            receivedAt: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        });
+        if (recentForUser) {
+            console.log(`[ViralTag] Already scheduled a viral reply for this user in the last 24h. Rate limit safeguard triggered. Skipping.`);
+            return;
+        }
+    } catch (err) {
+        console.error('[ViralTag] Error checking safeguards:', err.message);
     }
 
     // Mark as checked to debounce

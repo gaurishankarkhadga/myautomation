@@ -346,6 +346,62 @@ body {
     color: var(--text-faint);
 }
 
+/* ── AI Quota ─────────────────────────────────────────────────── */
+.quota-display {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.quota-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.quota-text .text-ok {
+    color: var(--green);
+}
+
+.quota-text .text-danger {
+    color: var(--red);
+    font-weight: 600;
+}
+
+.quota-bar-bg {
+    width: 100%;
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.quota-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #bb86fc, #6200ea);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.quota-bar-fill.danger {
+    background: linear-gradient(90deg, #ff5252, #f44336);
+}
+
+.quota-warning {
+    font-size: 10px;
+    color: var(--red);
+    margin: 0;
+    text-align: right;
+    font-style: italic;
+}
+
 /* ── Sidebar action buttons ─────────────────────────────────── */
 .sidebar-action-btn {
     display: flex;
@@ -890,25 +946,29 @@ body {
 }
 
 .triage-badge.collaboration {
-    background: rgba(16, 185, 129, 0.12); /* Emerald */
+    background: rgba(16, 185, 129, 0.12);
+    /* Emerald */
     color: #10b981;
     border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .triage-badge.support {
-    background: rgba(59, 130, 246, 0.12); /* Blue */
+    background: rgba(59, 130, 246, 0.12);
+    /* Blue */
     color: #3b82f6;
     border: 1px solid rgba(59, 130, 246, 0.25);
 }
 
 .triage-badge.fan-mail {
-    background: rgba(236, 72, 153, 0.12); /* Pink */
+    background: rgba(236, 72, 153, 0.12);
+    /* Pink */
     color: #ec4899;
     border: 1px solid rgba(236, 72, 153, 0.25);
 }
 
 .triage-badge.spam {
-    background: rgba(239, 68, 68, 0.12); /* Red */
+    background: rgba(239, 68, 68, 0.12);
+    /* Red */
     color: var(--red);
     border: 1px solid rgba(239, 68, 68, 0.25);
 }

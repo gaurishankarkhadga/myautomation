@@ -36,6 +36,7 @@ function ChatHub() {
     const [connections, setConnections] = useState({ instagram: false, youtube: false });
     const [connectingPlatform, setConnectingPlatform] = useState(null);
     const [activeAutomations, setActiveAutomations] = useState({ count: 0, list: [] });
+    const [quota, setQuota] = useState(null);
 
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
@@ -64,12 +65,12 @@ function ChatHub() {
 
     useEffect(() => {
         if (token && userId) { fetchProfile(); loadChatHistory(); }
-        if (userId) fetchActiveCount();
+        if (userId) { fetchActiveCount(); fetchQuota(); }
     }, [token, userId]);
 
     useEffect(() => {
         if (!userId) return;
-        const id = setInterval(fetchActiveCount, 30000);
+        const id = setInterval(() => { fetchActiveCount(); fetchQuota(); }, 30000);
         return () => clearInterval(id);
     }, [userId]);
 
@@ -91,6 +92,14 @@ function ChatHub() {
             const res = await fetch(`${API_BASE_URL}/api/chat/active-count/${userId}`);
             const data = await res.json();
             if (data.success) setActiveAutomations({ count: data.activeCount, list: data.activeList });
+        } catch { }
+    };
+
+    const fetchQuota = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/chat/quota`);
+            const data = await res.json();
+            if (data.success) setQuota(data);
         } catch { }
     };
 
@@ -287,6 +296,28 @@ function ChatHub() {
                         </button>
                     )}
                 </div>
+
+                {/* AI Quota */}
+                {quota && (
+                    <div className="sidebar-section">
+                        <p className="sidebar-section-label">AI Quota</p>
+                        <div className="quota-display" id="quota-display">
+                            <div className="quota-text">
+                                <span>Gemini API ✨</span>
+                                <span className={quota.remaining < 20 ? 'text-danger' : 'text-ok'}>
+                                    {quota.remaining} / {quota.limit}
+                                </span>
+                            </div>
+                            <div className="quota-bar-bg">
+                                <div
+                                    className={`quota-bar-fill ${quota.remaining < 20 ? 'danger' : ''}`}
+                                    style={{ width: `${Math.min(100, Math.max(0, (quota.used / quota.limit) * 100))}%` }}
+                                ></div>
+                            </div>
+                            {quota.remaining < 20 && <p className="quota-warning">Free tier daily limit low!</p>}
+                        </div>
+                    </div>
+                )}
 
                 {/* Bottom */}
                 <div className="sidebar-footer">
