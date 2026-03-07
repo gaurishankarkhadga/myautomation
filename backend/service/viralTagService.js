@@ -1,17 +1,6 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const axios = require('axios');
 const { WebhookEvent, Token } = require('../model/Instaautomation');
-
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-const { incrementGeminiUsage } = require('./quotaService');
-const originalGenerateContent = aiModel.generateContent.bind(aiModel);
-aiModel.generateContent = async function (params) {
-    await incrementGeminiUsage();
-    return await originalGenerateContent(params);
-};
+const { generateContentWithFallback } = require('./geminiClient');
 
 const INSTAGRAM_CONFIG = {
     graphBaseUrl: `${process.env.INSTAGRAM_GRAPH_API_BASE_URL || 'https://graph.instagram.com'}/v${process.env.INSTAGRAM_GRAPH_API_VERSION || '24.0'}`
@@ -113,7 +102,7 @@ async function handleMention(userId, commentData) {
 
         if (!process.env.GEMINI_API_KEY) return;
 
-        const result = await aiModel.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt, 'gemini-1.5-flash');
         let responseText = result.response.text().trim();
 
         // Find JSON block
@@ -130,7 +119,7 @@ async function handleMention(userId, commentData) {
             const replyPrompt = `
                 Generate a short, appreciative, and slightly funny generic comment (under 15 words) that a popular creator would leave on a viral video they were heavily tagged in by their fans. Do NOT include quotes, emojis are fine.
             `;
-            const replyResult = await aiModel.generateContent(replyPrompt);
+            const replyResult = await generateContentWithFallback(replyPrompt, 'gemini-1.5-flash');
             const replyMessage = replyResult.response.text().trim().replace(/"/g, '');
 
             // Calculate 24 hours from now

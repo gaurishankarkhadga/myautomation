@@ -1,18 +1,7 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 const CreatorPersona = require('../model/CreatorPersona');
 const CreatorAsset = require('../model/CreatorAsset');
 const axios = require('axios');
-
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-const { incrementGeminiUsage } = require('./quotaService');
-const originalGenerateContent = model.generateContent.bind(model);
-model.generateContent = async function (params) {
-    await incrementGeminiUsage();
-    return await originalGenerateContent(params);
-};
+const { generateContentWithFallback } = require('./geminiClient');
 
 // Instagram Graph API base URL
 const GRAPH_BASE = `${process.env.INSTAGRAM_GRAPH_API_BASE_URL || 'https://graph.instagram.com'}/v${process.env.INSTAGRAM_GRAPH_API_VERSION || '24.0'}`;
@@ -197,7 +186,7 @@ async function analyzeProfile(userId, accessToken) {
 
         // Step 5: Call Gemini for analysis
         console.log('[AI-Service] Sending data to Gemini for persona analysis...');
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt);
         const responseText = result.response.text();
         const cleanedJson = cleanJsonString(responseText);
 
@@ -373,7 +362,7 @@ async function generateSmartReply(userId, incomingText, contextType, senderName)
 
         // Call Gemini
         console.log('[AI-Service] Calling Gemini 2.5 Flash for reply generation...');
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt);
         const reply = result.response.text().trim();
 
         // Strip surrounding quotes if Gemini wraps the reply
@@ -424,7 +413,7 @@ Rules:
 - Casual slang, abbreviations, or emoji-only comments are GENUINE
 - Simple reactions like "nice", "wow", "🔥" are GENUINE`;
 
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt);
         const responseText = result.response.text().trim();
         const cleaned = cleanJsonString(responseText);
         const parsed = JSON.parse(cleaned);
@@ -500,7 +489,7 @@ async function researchCreatorOnline(userId, username) {
         Be honest but helpful. Never fabricate specific facts.
         `;
 
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt);
         const responseText = result.response.text();
         const cleaned = cleanJsonString(responseText);
         const research = JSON.parse(cleaned);
@@ -586,7 +575,7 @@ async function matchCreatorAssets(incomingText, creatorAssets) {
         - Questions about pricing, courses, links, products = SPECIFIC
         `;
 
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt);
         const responseText = result.response.text();
         const cleaned = cleanJsonString(responseText);
         const analysis = JSON.parse(cleaned);
@@ -722,7 +711,7 @@ async function generateSmartDMReply(userId, incomingText, senderName, matchedAss
         }
 
         console.log('[AI-Service] Generating smart DM reply with asset context...');
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt);
         const reply = result.response.text().trim().replace(/^["']|["']$/g, '');
 
         if (!reply || reply.length === 0) {
