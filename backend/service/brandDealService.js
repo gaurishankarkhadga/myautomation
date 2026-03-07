@@ -1,10 +1,7 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { generateContentWithFallback } = require('./geminiClient');
 const Campaign = require('../model/Campaign');
 const DealApplication = require('../model/DealApplication');
 const axios = require('axios');
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 const GRAPH_BASE = `${process.env.INSTAGRAM_GRAPH_API_BASE_URL || 'https://graph.instagram.com'}/v${process.env.INSTAGRAM_GRAPH_API_VERSION || '24.0'}`;
 
@@ -113,7 +110,7 @@ BIO: ${profile.biography || ''}
 
 Return ONLY the niche word(s), nothing else.`;
 
-        const nicheResult = await model.generateContent(nichePrompt);
+        const nicheResult = await generateContentWithFallback(nichePrompt, "gemini-2.5-flash");
         niche = nicheResult.response.text().trim().toLowerCase().replace(/[^a-z\s]/g, '').substring(0, 30) || 'lifestyle';
     } catch (e) {
         console.error('[Marketplace] Niche detection failed, using fallback:', e.message);
@@ -174,7 +171,7 @@ Score the match 0-100 and give 3-4 specific reasons. Consider:
 Return ONLY JSON:
 {"score": 85, "reasons": ["Reason 1", "Reason 2", "Reason 3"]}`;
 
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt, "gemini-2.5-flash");
         const parsed = JSON.parse(cleanJsonString(result.response.text()));
         return {
             score: Math.min(100, Math.max(0, parseInt(parsed.score) || 50)),
@@ -234,7 +231,7 @@ Requirements:
 Return ONLY JSON:
 {"subject": "Subject line", "body": "Full email body"}`;
 
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt, "gemini-2.5-flash");
         return JSON.parse(cleanJsonString(result.response.text()));
     } catch (e) {
         console.error('[Marketplace] Pitch generation error:', e.message);

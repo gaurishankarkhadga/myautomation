@@ -1,8 +1,4 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const { generateContentWithFallback } = require('./geminiClient');
 
 /**
  * Categorize an incoming DM into predefined priority tags
@@ -32,7 +28,7 @@ async function triageMessage(messageText) {
             Message to classify: "${messageText}"
         `;
 
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt, 'gemini-1.5-flash');
         const responseText = result.response.text().trim();
 
         // Clean up the output just in case

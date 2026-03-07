@@ -1,11 +1,4 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const fs = require('fs');
-const path = require('path');
-const ChatHistory = require('../model/ChatHistory');
-
-// ==================== INITIALIZE GEMINI ====================
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const { generateContentWithFallback } = require('./geminiClient');
 
 // ==================== HANDLER REGISTRY (Auto-Discovery) ====================
 const handlerRegistry = new Map();  // intent -> handler
@@ -127,7 +120,7 @@ USER MESSAGE: "${message}"
 Return ONLY a valid JSON array. No markdown, no explanation, no extra text. Just the JSON array.`;
 
     try {
-        const result = await model.generateContent(prompt);
+        const result = await generateContentWithFallback(prompt, "gemini-2.5-flash");
         const responseText = result.response.text().trim();
 
         // Clean the response — remove markdown code fences if present
@@ -272,7 +265,7 @@ Creator's message: "${message}"
 
 Respond naturally as their AI assistant.`;
 
-        const result = await model.generateContent(chatPrompt);
+        const result = await generateContentWithFallback(chatPrompt, "gemini-2.5-flash");
         chatResponse = result.response.text().trim();
     } catch (error) {
         console.error('[ChatService] Chat response generation failed:', error.message);
