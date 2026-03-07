@@ -1,4 +1,7 @@
 const { generateContentWithFallback } = require('./geminiClient');
+const fs = require('fs');
+const path = require('path');
+const ChatHistory = require('../model/ChatHistory');
 
 // ==================== HANDLER REGISTRY (Auto-Discovery) ====================
 const handlerRegistry = new Map();  // intent -> handler
