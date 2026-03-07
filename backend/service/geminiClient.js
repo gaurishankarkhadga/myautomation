@@ -35,12 +35,14 @@ async function generateContentWithFallback(prompt, modelName = 'gemini-2.5-flash
         await incrementGeminiUsage(); // Track the successful usage
         return result;
     } catch (error) {
-        const isRateLimit = error.status === 429;
-        const isInvalidKey = error.status === 400 && error.message.includes('API key not valid');
+        // The official Gemini SDK doesn't always expose error.status, so we check error.message
+        const errorMessage = error.message || '';
+        const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || error.status === 429;
+        const isInvalidKey = errorMessage.includes('API key not valid') || errorMessage.includes('API_KEY_INVALID') || error.status === 400;
 
-        // If it's a 429 Too Many Requests or 400 Invalid Key and we haven't tried all keys yet
+        // If it's a Rate Limit or Invalid Key and we haven't tried all keys yet
         if ((isRateLimit || isInvalidKey) && attempts < apiKeys.length - 1) {
-            console.warn(`[GeminiClient] API Key failed (${error.status}). Falling back to next available key... (Attempt ${attempts + 1}/${apiKeys.length - 1})`);
+            console.warn(`[GeminiClient] API Key failed (${isRateLimit ? 'Rate Limit 429' : 'Invalid Key 400'}). Falling back to next available key... (Attempt ${attempts + 1}/${apiKeys.length - 1})`);
             return await generateContentWithFallback(prompt, modelName, attempts + 1);
         }
 
