@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import InstaProfile from './components/InstaProfile';
-import BrandDeals from './components/BrandDeals';
-import ToastNotification, { useToasts } from './components/ToastNotification';
-import './InstagramTest.css';
+import InstaProfile from './InstaProfile';
+import BrandDeals from './BrandDeals';
+import ToastNotification, { useToasts } from './ToastNotification';
+import './InstagramSettings.css';
 
 
 
@@ -11,7 +11,7 @@ import './InstagramTest.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-function InstagramTest() {
+function InstagramSettings() {
     const [token, setToken] = useState('');
     const [userId, setUserId] = useState('');
     const [profile, setProfile] = useState(null);
@@ -497,11 +497,9 @@ function InstagramTest() {
     };
 
     return (
-        <div className="instagram-test">
+        <div className="instagram-settings-tab">
             <ToastNotification toasts={toasts} onRemove={removeToast} />
             <div className="container">
-                <h1>Instagram Graph API Test</h1>
-
                 {error && (
                     <div className="error">
                         Error: {error}
@@ -509,35 +507,9 @@ function InstagramTest() {
                 )}
 
                 {!token ? (
-                    <div className="connect-section">
-                        <h1>Start Automating</h1>
-                        <p>Connect your social accounts to unlock AI-powered management</p>
-                        <div className="dual-connect-actions">
-                            <button
-                                onClick={handleConnect}
-                                disabled={loadingInsta || loadingYT}
-                                className="btn-instagram-connect"
-                            >
-                                {loadingInsta ? '...' : (
-                                    <>
-                                        <span className="btn-icon">📸</span>
-                                        Connect Instagram
-                                    </>
-                                )}
-                            </button>
-                            <button
-                                onClick={handleConnectYouTube}
-                                disabled={loadingInsta || loadingYT}
-                                className="btn-youtube-connect"
-                            >
-                                {loadingYT ? '...' : (
-                                    <>
-                                        <span className="btn-icon">📺</span>
-                                        Connect YouTube
-                                    </>
-                                )}
-                            </button>
-                        </div>
+                    <div className="connect-section" style={{ textAlign: 'center', padding: '40px' }}>
+                        <h2>Not Connected</h2>
+                        <p>Connect your Instagram account in the ChatHub to access these settings.</p>
                     </div>
                 ) : (
                     <div className="data-section">
@@ -1047,19 +1019,8 @@ function InstagramTest() {
                     </div>
                 )}
             </div>
-
-            <footer className="home-footer">
-                <div className="footer-links">
-                    <Link to="/privacy-policy">Privacy Policy</Link>
-                    <Link to="/terms-and-conditions">Terms & Conditions</Link>
-                    <Link to="/data-deletion">Data Deletion</Link>
-                </div>
-                <div className="footer-copyright">
-                    <p>&copy; {new Date().getFullYear()} CreatorHub. All rights reserved.</p>
-                </div>
-            </footer>
         </div >
     );
 }
 
-export default InstagramTest;
+export default InstagramSettings;

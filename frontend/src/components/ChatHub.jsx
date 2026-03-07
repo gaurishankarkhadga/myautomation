@@ -81,9 +81,21 @@ function ChatHub() {
 
     const fetchProfile = async () => {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/instagram/profile?token=${token}`);
-            const data = await res.json();
-            if (data.success) setProfile(data.data);
+            if (token) {
+                const res = await fetch(`${API_BASE_URL}/api/instagram/profile?token=${token}`);
+                const data = await res.json();
+                if (data.success) setProfile(data.data);
+            } else if (userId) { // fallback to YouTube
+                const res = await fetch(`${API_BASE_URL}/api/youtube/profile?channelId=${userId}`);
+                const data = await res.json();
+                if (data.success && data.data) {
+                    setProfile({
+                        username: data.data.title || 'YouTube Creator',
+                        profile_picture_url: data.data.thumbnailUrl || '',
+                        followers_count: data.data.subscriberCount || 0
+                    });
+                }
+            }
         } catch { }
     };
 

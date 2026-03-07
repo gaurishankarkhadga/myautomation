@@ -1,0 +1,135 @@
+/* frontend/src/styles/AdvancedSettings.css */
+.advanced-settings-page {
+    min-height: 100vh;
+    background-color: var(--bg-primary, #0f0f11);
+    color: var(--text-primary, #ffffff);
+    font-family: inherit;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-header {
+    background: var(--bg-glass, rgba(20, 20, 24, 0.7));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    padding: 0 24px;
+    height: 70px;
+    display: flex;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.back-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #a1a1aa);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+    color: var(--text-primary, #ffffff);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.header-left h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.settings-content {
+    flex: 1;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 30px 24px;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 30px;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    padding-bottom: 2px;
+}
+
+.tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #a1a1aa);
+    padding: 12px 20px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.tab-btn:hover {
+    color: var(--text-primary, #ffffff);
+}
+
+.tab-btn.active {
+    color: var(--text-primary, #ffffff);
+    border-bottom-color: #ffffff;
+}
+
+/* Specific styling overrrides for embedded components */
+.tab-render-area {
+    animation: fadeIn 0.4s ease;
+}
+
+.tab-render-area .container,
+.tab-render-area .yt-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+}
+
+.tab-render-area .home-footer,
+.tab-render-area .yt-dashboard .home-footer {
+    display: none !important;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 768px) {
+    .settings-tabs {
+        flex-direction: row;
+        overflow-x: auto;
+    }
+
+    .settings-content {
+        padding: 20px 16px;
+    }
+}

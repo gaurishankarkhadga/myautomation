@@ -286,11 +286,11 @@ router.get('/callback', async (req, res) => {
 
         if (oauthError) {
             console.error('[YouTube-OAuth] OAuth error:', oauthError);
-            return res.redirect(`${FRONTEND_URL}/youtube?error=${oauthError}`);
+            return res.redirect(`${FRONTEND_URL}/?error=${oauthError}`);
         }
 
         if (!code) {
-            return res.redirect(`${FRONTEND_URL}/youtube?error=no_code`);
+            return res.redirect(`${FRONTEND_URL}/?error=no_code`);
         }
 
         console.log('[YouTube-OAuth] Received authorization code');
@@ -325,12 +325,12 @@ router.get('/callback', async (req, res) => {
         console.log('[YouTube-OAuth] Token stored for channel:', channelInfo.id);
 
         // Redirect to frontend with channel ID
-        res.redirect(`${FRONTEND_URL}/youtube?channelId=${channelInfo.id}&channelTitle=${encodeURIComponent(channelInfo.title)}`);
+        res.redirect(`${FRONTEND_URL}/?channelId=${channelInfo.id}&channelTitle=${encodeURIComponent(channelInfo.title)}`);
 
     } catch (error) {
         console.error('[YouTube-OAuth] Callback error:', error.message);
         const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-        res.redirect(`${FRONTEND_URL}/youtube?error=oauth_failed&message=${encodeURIComponent(error.message)}`);
+        res.redirect(`${FRONTEND_URL}/?error=oauth_failed&message=${encodeURIComponent(error.message)}`);
     }
 });
 

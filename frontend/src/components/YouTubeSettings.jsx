@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import './YouTubeTest.css';
+import './YouTubeSettings.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-function YouTubeTest() {
+function YouTubeSettings() {
     const [channelId, setChannelId] = useState('');
     const [channelTitle, setChannelTitle] = useState('');
     const [profile, setProfile] = useState(null);
@@ -377,43 +377,9 @@ function YouTubeTest() {
 
                 {/* Connect Section */}
                 {!channelId ? (
-                    <div className="yt-connect-section">
-                        <div className="yt-connect-card">
-                            <div className="yt-connect-icon">
-                                <svg viewBox="0 0 90 20" className="yt-connect-logo">
-                                    <path d="M27.97 3.12a3.57 3.57 0 00-2.54-2.53C23.36 0 14.39 0 14.39 0S5.42 0 3.36.59A3.57 3.57 0 00.82 3.12C.2 5.17.2 10 .2 10s0 4.83.62 6.88a3.57 3.57 0 002.54 2.53c2.06.59 10.03.59 10.03.59s8.97 0 11.04-.59a3.57 3.57 0 002.54-2.53c.62-2.05.62-6.88.62-6.88s0-4.83-.62-6.88z" fill="#FF0000" />
-                                    <path d="M11.5 14.29l6.73-4.29-6.73-4.29v8.58z" fill="#fff" />
-                                </svg>
-                            </div>
-                            <h1>Start Automating</h1>
-                            <p>Connect your social accounts to unlock AI-powered management</p>
-                            <div className="yt-dual-connect-actions">
-                                <button
-                                    onClick={handleConnect}
-                                    disabled={loadingInsta || loadingYT}
-                                    className="yt-btn-connect"
-                                >
-                                    {loadingYT ? '...' : (
-                                        <>
-                                            <span className="btn-icon">📺</span>
-                                            Connect YouTube
-                                        </>
-                                    )}
-                                </button>
-                                <button
-                                    onClick={handleConnectInstagram}
-                                    disabled={loadingInsta || loadingYT}
-                                    className="yt-btn-instagram-connect"
-                                >
-                                    {loadingInsta ? '...' : (
-                                        <>
-                                            <span className="btn-icon">📸</span>
-                                            Connect Instagram
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
+                    <div className="yt-connect-section" style={{ textAlign: 'center', padding: '40px' }}>
+                        <h2>Not Connected</h2>
+                        <p>Connect your YouTube account in the ChatHub to access these settings.</p>
                     </div>
                 ) : (
                     <div className="yt-main-content">
@@ -748,19 +714,8 @@ function YouTubeTest() {
                     </div>
                 )}
             </div>
-
-            <footer className="home-footer">
-                <div className="footer-links">
-                    <Link to="/privacy-policy">Privacy Policy</Link>
-                    <Link to="/terms-and-conditions">Terms & Conditions</Link>
-                    <Link to="/data-deletion">Data Deletion</Link>
-                </div>
-                <div className="footer-copyright">
-                    <p>&copy; {new Date().getFullYear()} CreatorHub. All rights reserved.</p>
-                </div>
-            </footer>
         </div>
     );
 }
 
-export default YouTubeTest;
+export default YouTubeSettings;
