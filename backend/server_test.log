@@ -1,0 +1,37 @@
+
+> instagram-graph-api-test@1.0.0 start
+> node server.js
+
+[dotenv@17.2.3] injecting env (23) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[GeminiClient] Initialized with 3 API key(s) for automatic failover.
+[ChatService] Loaded handler: brandDeals (find_brand_deals, list_brand_deals)
+[ChatService] Loaded handler: commentAutoReply (enable_comment_autoreply, disable_comment_autoreply, configure_comment_autoreply)
+[ChatService] Loaded handler: creatorAssets (add_asset, list_assets, delete_asset, toggle_asset)
+[ChatService] Loaded handler: crossPlatform (enable_all_automation, disable_all_automation, set_platform_preference)
+[ChatService] Loaded handler: dmAutoReply (enable_dm_autoreply, disable_dm_autoreply, configure_dm_autoreply, set_dm_fallback)
+[ChatService] Loaded handler: preferences (set_content_target, set_time_limit, set_comment_limit, get_preferences, reset_preferences)
+[ChatService] Loaded handler: profile (get_profile, analyze_persona)
+[ChatService] Loaded handler: status (get_status, get_active_automations, get_comments_log, get_dm_log)
+[ChatService] Loaded handler: webhooks (subscribe_webhooks)
+[ChatService] 9 handlers loaded, 28 intents registered.
+
+[Server] Instagram Graph API Server
+[Server] Running on: http://localhost:8000
+[Server] Environment: production
+[Server] Frontend URL: https://mydmtestingapp.netlify.app
+[Server] OAuth Callback: https://myautomation-test3.onrender.com/api/instagram/callback
+[Server] Webhook URL: https://myautomation-test3.onrender.com/api/instagram/webhook
+[Server] Webhook Verify Token: *** (set)
+
+[MongoDB] Connected successfully
+[ChatAPI] Message from testuser_verif1: "turn off dms"
+
+[ChatService] ====== Processing: "turn off dms" (user: testuser_verif1) ======
+[GeminiClient] API Key failed (Rate Limit 429). Falling back to next available key... (Attempt 1/2)
+[GeminiClient] API Key failed (Rate Limit 429). Falling back to next available key... (Attempt 2/2)
+[ChatService] Parsed 1 intent(s) from: "turn off dms"
+[ChatService] Intents: [{"intent":"disable_dm_autoreply","params":{},"confidence":0.95}]
+[ChatService] Actions: 1, HasChat: false
+[ChatService] ====== Done ======
+
+Killed

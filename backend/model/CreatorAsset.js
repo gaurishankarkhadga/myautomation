@@ -39,14 +39,12 @@ creatorAssetSchema.index({ userId: 1, type: 1, isActive: 1 });
 creatorAssetSchema.index({ userId: 1, isDefault: 1 });
 
 // Auto-update timestamp
-creatorAssetSchema.pre('save', function (next) {
+creatorAssetSchema.pre('save', function () {
     this.updatedAt = new Date();
-    next();
 });
 
-creatorAssetSchema.pre('findOneAndUpdate', function (next) {
+creatorAssetSchema.pre('findOneAndUpdate', function () {
     this.set({ updatedAt: new Date() });
-    next();
 });
 
 module.exports = mongoose.model('CreatorAsset', creatorAssetSchema);

@@ -60,7 +60,12 @@ module.exports = {
             if (intent === 'configure_dm_autoreply') {
                 const update = {};
                 if (params.mode) update.replyMode = params.mode;
-                if (params.delay) update.delaySeconds = Math.min(Math.max(params.delay, 5), 300);
+                if (params.delay) {
+                    const parsedDelay = parseInt(params.delay);
+                    if (!isNaN(parsedDelay)) {
+                        update.delaySeconds = Math.min(Math.max(parsedDelay, 5), 300);
+                    }
+                }
                 if (params.message !== undefined) update.message = params.message;
                 if (params.enabled !== undefined) update.enabled = params.enabled;
 
